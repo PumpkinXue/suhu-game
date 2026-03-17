@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>皇帝后宫模拟器</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Logo区域 -->
+        <header class="header">
+            <a href="/" class="logo">SUHU | 素狐科技</a>
+        </header>
+
+        <!-- 游戏主界面 -->
+        <main class="game-main">
+            <!-- 标签页导航 -->
+            <nav class="tabs">
+                <button class="tab-btn" data-tab="attributes">属性</button>
+                <button class="tab-btn" data-tab="characters">人物</button>
+                <button class="tab-btn active" data-tab="action">行动</button>
+            </nav>
+
+            <!-- 属性界面 -->
+            <section id="attributes" class="tab-content">
+                <div class="emperor-card">
+                    <h2>皇帝信息</h2>
+                    <div class="emperor-info">
+                        <div class="info-row">
+                            <span class="label">姓名：</span>
+                            <span id="emperorName" class="value">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">性别：</span>
+                            <span id="emperorGender" class="value">-</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">人物背景：</span>
+                            <span id="emperorBackground" class="value">-</span>
+                        </div>
+                    </div>
+                    <div class="attributes-grid">
+                        <div class="attribute-item">
+                            <span class="attr-label">才华</span>
+                            <div class="attr-bar">
+                                <div class="attr-fill" id="attrTalent"></div>
+                            </div>
+                            <span class="attr-value" id="valueTalent">0</span>
+                        </div>
+                        <div class="attribute-item">
+                            <span class="attr-label">武力</span>
+                            <div class="attr-bar">
+                                <div class="attr-fill" id="attrMartial"></div>
+                            </div>
+                            <span class="attr-value" id="valueMartial">0</span>
+                        </div>
+                        <div class="attribute-item">
+                            <span class="attr-label">容貌</span>
+                            <div class="attr-bar">
+                                <div class="attr-fill" id="attrAppearance"></div>
+                            </div>
+                            <span class="attr-value" id="valueAppearance">0</span>
+                        </div>
+                        <div class="attribute-item">
+                            <span class="attr-label">道德</span>
+                            <div class="attr-bar">
+                                <div class="attr-fill" id="attrMorality"></div>
+                            </div>
+                            <span class="attr-value" id="valueMorality">0</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 人物界面 -->
+            <section id="characters" class="tab-content">
+                <h2>人物列表</h2>
+                <div id="characterList" class="concubine-list">
+                    <!-- 人物卡片将动态生成 -->
+                </div>
+            </section>
+
+            <!-- 行动界面 -->
+            <section id="action" class="tab-content active">
+                <div class="action-container">
+                    <!-- 文字展示区 -->
+                    <div id="storyDisplay" class="story-display">
+                        <div class="story-welcome">
+                            <p>欢迎来到皇帝后宫模拟器</p>
+                            <p>您可以点击下方的建议行动，或在输入框中描述您的行动</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 属性变动显示区 -->
+                    <div id="attributeChanges" class="attribute-changes" style="display: none;">
+                        <span class="attr-change-label">本次变动：</span>
+                        <span id="attributeChangesText"></span>
+                    </div>
+
+                    <!-- 行动建议区 -->
+                    <div id="actionSuggestions" class="action-suggestions">
+                        <h3>建议行动</h3>
+                        <div class="suggestion-buttons">
+                            <button class="suggestion-btn gentle" onclick="takeAction('温柔')">
+                                <span class="style-tag">温柔</span>
+                                <span id="suggestion1">-</span>
+                            </button>
+                            <button class="suggestion-btn aggressive" onclick="takeAction('激进')">
+                                <span class="style-tag">激进</span>
+                                <span id="suggestion2">-</span>
+                            </button>
+                            <button class="suggestion-btn calm" onclick="takeAction('沉稳')">
+                                <span class="style-tag">沉稳</span>
+                                <span id="suggestion3">-</span>
+                            </button>
+                            <button class="suggestion-btn random" onclick="takeAction('随机')">
+                                <span class="style-tag">随机</span>
+                                <span id="suggestion4">-</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 输入区 -->
+                    <div class="input-area">
+                        <textarea id="actionInput" placeholder="描述您的行动..." rows="3"></textarea>
+                        <button class="btn-send" onclick="submitAction()">发送</button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 妃子详情模态框 -->
+    <!-- 人物详情模态框（合并版） -->
+    <div id="characterModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2>
+                <span id="modalName">人物姓名</span>
+                <span class="rank-badge-large" id="modalRank">-</span>
+            </h2>
+            <div class="modal-details">
+                <p><strong>类型：</strong><span id="modalType">-</span></p>
+                <p><strong>性别：</strong><span id="modalGender">-</span></p>
+                <p><strong>简介：</strong><span id="modalIntro">-</span></p>
+                <p><strong>性格：</strong><span id="modalPersonality">-</span></p>
+                <p id="motherRow"><strong>生母：</strong><span id="modalMother">-</span></p>
+                <p><strong>心境：</strong><span id="modalMood">-</span></p>
+                <p><strong>想法：</strong><span id="modalThought">-</span></p>
+                <div class="stat-row">
+                    <div class="stat-item">
+                        <span class="stat-label">好感度：</span>
+                        <span id="modalFavorability">0</span>
+                        <div class="stat-bar-full"><div id="modalFavorabilityBar" class="stat-fill"></div></div>
+                    </div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat-item">
+                        <span class="stat-label">真心度：</span>
+                        <span id="modalSincerity">0</span>
+                        <div class="stat-bar-full"><div id="modalSincerityBar" class="stat-fill"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 属性变动提示 -->
+    <div id="attributeToast" class="toast"></div>
+
+    <!-- 加载提示 -->
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>加载游戏数据...</p>
+    </div>
+
+    <script>
+        let gameData = null;
+        let conversationHistory = [];  // 最近3条原始对话
+        let conversationSummary = [];  // 更早的对话摘要（15字以内，最多20条）
+        let isProcessing = false;
+
+        // 页面加载时获取游戏数据（优先从localStorage读取）
+        async function loadGameData() {
+            console.log('开始加载游戏数据...');
+            
+            // 尝试从localStorage读取游戏数据
+            const savedData = localStorage.getItem('suhu_game_data');
+            if (savedData) {
+                try {
+                    gameData = JSON.parse(savedData);
+                    console.log('从localStorage加载数据成功');
+                    displayGameData();
+                    loadInitialSuggestions();
+                    document.getElementById('loading').style.display = 'none';
+                    return;
+                } catch (e) {
+                    console.error('解析localStorage数据失败:', e);
+                }
+            }
+            
+            // 如果没有本地数据，尝试从服务器获取
+            try {
+                const response = await fetch('/api/get_game_data');
+                console.log('响应状态:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error('HTTP错误: ' + response.status);
+                }
+                
+                const result = await response.json();
+                console.log('返回数据:', result);
+                
+                if (result.success) {
+                    gameData = result.data;
+                    // 保存到localStorage
+                    localStorage.setItem('suhu_game_data', JSON.stringify(gameData));
+                    displayGameData();
+                    loadInitialSuggestions();
+                    document.getElementById('loading').style.display = 'none';
+                } else {
+                    console.error('加载失败:', result.error);
+                    alert('加载游戏数据失败，正在跳转...');
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                console.error('请求失败:', error);
+                alert('加载失败: ' + error.message);
+                window.location.href = '/';
+            }
+        }
+
+        // 显示游戏数据
+        function displayGameData() {
+            const emperor = gameData.emperor;
+
+            // 显示皇帝信息
+            document.getElementById('emperorName').textContent = emperor.name;
+            document.getElementById('emperorGender').textContent = emperor.gender;
+            document.getElementById('emperorBackground').textContent = emperor.background;
+
+            // 显示属性
+            updateAttributeDisplay(emperor);
+
+            // 显示人物列表（合并皇嗣和妃子）
+            displayCharacters();
+        }
+
+        // 更新属性显示
+        function updateAttributeDisplay(emperor) {
+            document.getElementById('valueTalent').textContent = emperor.talent;
+            document.getElementById('valueMartial').textContent = emperor.martial;
+            document.getElementById('valueAppearance').textContent = emperor.appearance;
+            document.getElementById('valueMorality').textContent = emperor.morality;
+            
+            document.getElementById('attrTalent').style.width = emperor.talent + '%';
+            document.getElementById('attrMartial').style.width = emperor.martial + '%';
+            document.getElementById('attrAppearance').style.width = emperor.appearance + '%';
+            document.getElementById('attrMorality').style.width = emperor.morality + '%';
+        }
+
+        // 显示人物列表（合并皇嗣和妃子）
+        function displayCharacters() {
+            const characterList = document.getElementById('characterList');
+            const characters = gameData.characters || [];
+
+            characterList.innerHTML = '';
+
+            if (characters.length === 0) {
+                characterList.innerHTML = '<p class="empty-hint">暂无人物</p>';
+                return;
+            }
+
+            characters.forEach((character, index) => {
+                const card = document.createElement('div');
+                card.className = 'concubine-card';
+                // 根据类型添加不同的样式
+                if (character.type === '皇嗣') {
+                    card.className = 'concubine-card heir-card';
+                }
+                card.onclick = () => showCharacterDetail(index);
+
+                // 根据性别显示不同的图标
+                let genderIcon = '👩';
+                if (character.gender === '男') {
+                    genderIcon = character.type === '皇嗣' ? '👦' : '👨';
+                } else if (character.gender === '女') {
+                    genderIcon = character.type === '皇嗣' ? '👧' : '👩';
+                }
+
+                const favorValue = character.favorability || 0;
+                const sincereValue = character.sincerity || 0;
+
+                card.innerHTML = `
+                    <div class="concubine-avatar">${genderIcon}</div>
+                    <div class="person-name-row">
+                        <div class="concubine-name">${character.name}</div>
+                    </div>
+                    <div class="rank-badge">${character.rank || ''}</div>
+                    <div class="concubine-brief">${character.personality}</div>
+                    <div class="concubine-mood">${character.type} · 心境：${character.mood}</div>
+                    <div class="stat-values">
+                        <div class="stat-value-item favor">
+                            <span class="stat-icon">❤</span>
+                            <span class="stat-number">好感：${favorValue}</span>
+                        </div>
+                        <div class="stat-value-item sincer">
+                            <span class="stat-icon">♥</span>
+                            <span class="stat-number">真心：${sincereValue}</span>
+                        </div>
+                    </div>
+                `;
+
+                characterList.appendChild(card);
+            });
+        }
+
+        // 显示人物详情
+        function showCharacterDetail(index) {
+            const character = gameData.characters[index];
+
+            document.getElementById('modalName').textContent = character.name;
+            document.getElementById('modalType').textContent = character.type || '-';
+            document.getElementById('modalGender').textContent = character.gender || '-';
+            document.getElementById('modalRank').textContent = character.rank || '-';
+            document.getElementById('modalIntro').textContent = character.intro;
+            document.getElementById('modalPersonality').textContent = character.personality;
+
+            // 生母字段只对皇嗣显示
+            const motherRow = document.getElementById('motherRow');
+            if (character.type === '皇嗣') {
+                motherRow.style.display = 'block';
+                document.getElementById('modalMother').textContent = character.mother || '无记载';
+            } else {
+                motherRow.style.display = 'none';
+            }
+
+            document.getElementById('modalMood').textContent = character.mood;
+            document.getElementById('modalThought').textContent = character.thought || '暂无想法';
+
+            // 好感度和真心度
+            const favor = character.favorability || 0;
+            const sincere = character.sincerity || 0;
+            document.getElementById('modalFavorability').textContent = favor;
+            document.getElementById('modalSincerity').textContent = sincere;
+            const favorPercent = ((favor + 100) / 2);
+            const sincerePercent = ((sincere + 100) / 2);
+            const favorBar = document.getElementById('modalFavorabilityBar');
+            const sincereBar = document.getElementById('modalSincerityBar');
+            favorBar.style.width = favorPercent + '%';
+            sincereBar.style.width = sincerePercent + '%';
+            // 根据正负值设置颜色
+            favorBar.className = 'stat-fill ' + (favor >= 0 ? 'positive' : 'negative');
+            sincereBar.className = 'stat-fill ' + (sincere >= 0 ? 'positive' : 'negative');
+
+            document.getElementById('characterModal').style.display = 'block';
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('characterModal').style.display = 'none';
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            const modal = document.getElementById('characterModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // 标签页切换
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).classList.add('active');
+            });
+        });
+
+        // 加载初始行动建议（传递历史上下文）
+        async function loadInitialSuggestions() {
+            try {
+                const response = await fetch('/api/get_suggestions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_data: gameData,
+                        history: getHistoryForAPI()
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updateSuggestions(result.suggestions);
+                }
+            } catch (error) {
+                console.error('加载建议失败:', error);
+            }
+        }
+
+        // 更新行动建议
+        function updateSuggestions(suggestions) {
+            document.getElementById('suggestion1').textContent = suggestions.gentle || '-';
+            document.getElementById('suggestion2').textContent = suggestions.aggressive || '-';
+            document.getElementById('suggestion3').textContent = suggestions.calm || '-';
+            document.getElementById('suggestion4').textContent = suggestions.random || '-';
+        }
+
+        // 刷新行动建议（基于最新剧情历史）
+        async function refreshSuggestions() {
+            try {
+                const response = await fetch('/api/get_suggestions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        game_data: gameData,
+                        history: getHistoryForAPI()
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    updateSuggestions(result.suggestions);
+                }
+            } catch (error) {
+                console.error('刷新建议失败:', error);
+            }
+        }
+
+        // 执行行动
+        async function takeAction(style) {
+            if (isProcessing) return;
+            
+            const suggestionMap = {
+                '温柔': document.getElementById('suggestion1').textContent,
+                '激进': document.getElementById('suggestion2').textContent,
+                '沉稳': document.getElementById('suggestion3').textContent,
+                '随机': document.getElementById('suggestion4').textContent
+            };
+            
+            const action = suggestionMap[style];
+            if (action && action !== '-') {
+                await executeAction(action, style);
+            }
+        }
+
+        // 提交行动
+        async function submitAction() {
+            if (isProcessing) return;
+            
+            const input = document.getElementById('actionInput');
+            const action = input.value.trim();
+            
+            if (!action) return;
+            
+            await executeAction(action, 'custom');
+            input.value = '';
+        }
+
+        // 保存当前状态用于回退
+        let previousGameData = null;
+        let previousConversationHistory = [];
+        let previousConversationSummary = [];
+        let previousSuggestions = {};
+        
+        // 获取当前行动建议
+        function getCurrentSuggestions() {
+            return {
+                gentle: document.getElementById('suggestion1').textContent,
+                aggressive: document.getElementById('suggestion2').textContent,
+                calm: document.getElementById('suggestion3').textContent,
+                random: document.getElementById('suggestion4').textContent
+            };
+        }
+
+        // 获取发送给后端的历史数据（3条原始 + 摘要）
+        function getHistoryForAPI() {
+            const result = [];
+            // 添加最近3条原始对话
+            conversationHistory.forEach(function(item) {
+                result.push({ role: item.role, content: item.content });
+            });
+            // 添加更早的摘要（格式：行动|剧情）
+            conversationSummary.forEach(function(item) {
+                result.push({ role: 'summary', content: '[' + item.summary + ']' });
+            });
+            return result;
+        }
+
+        // 更新对话历史（包含摘要机制）- 异步调用LLM生成摘要
+        async function updateConversationHistory(action, story) {
+            // 添加原始对话
+            conversationHistory.push({ role: 'user', content: action });
+            conversationHistory.push({ role: 'assistant', content: story });
+
+            // 如果超过3条，将最早的对话转为摘要（调用LLM生成）
+            while (conversationHistory.length > 3) {
+                const oldUser = conversationHistory.shift();
+                const oldAssistant = conversationHistory.shift();
+
+                // 调用后端API生成摘要
+                try {
+                    const response = await fetch('/api/generate_summary', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: oldUser.content,
+                            story: oldAssistant.content
+                        })
+                    });
+                    const result = await response.json();
+                    const summary = result.success ? result.summary : '';
+
+                    if (summary) {
+                        conversationSummary.push({
+                            role: 'summary',
+                            summary: summary,
+                            timestamp: Date.now()
+                        });
+                    }
+                } catch (e) {
+                    console.error('生成摘要失败:', e);
+                }
+            }
+
+            // 只保留最近20条摘要
+            if (conversationSummary.length > 20) {
+                conversationSummary = conversationSummary.slice(-20);
+            }
+        }
+        
+        // 执行行动（流式版本）
+        async function executeAction(action, style) {
+            isProcessing = true;
+            
+            // 保存当前状态用于回退（包括行动建议）
+            previousGameData = JSON.parse(JSON.stringify(gameData));
+            previousConversationHistory = JSON.parse(JSON.stringify(conversationHistory));
+            previousConversationSummary = JSON.parse(JSON.stringify(conversationSummary));
+            previousSuggestions = getCurrentSuggestions();
+            
+            // 隐藏之前的属性变动和错误按钮
+            document.getElementById('attributeChanges').style.display = 'none';
+            hideRetryButton();
+            
+            // 显示用户行动
+            addStoryMessage(action, 'user');
+            
+            // 创建一个用于流式显示的消息元素
+            const storyMessageDiv = document.createElement('div');
+            storyMessageDiv.className = 'story-message story-assistant';
+            storyMessageDiv.innerHTML = '<strong>【剧情】</strong><span class="streaming-text"></span><span class="loading-dots"></span>';
+            document.getElementById('storyDisplay').appendChild(storyMessageDiv);
+            
+            const streamingText = storyMessageDiv.querySelector('.streaming-text');
+            const loadingDots = storyMessageDiv.querySelector('.loading-dots');
+            scrollToBottom();
+            
+            // 启动等待动画
+            let dotsCount = 0;
+            const dotsAnimation = setInterval(() => {
+                dotsCount = (dotsCount + 1) % 4;
+                loadingDots.textContent = '.'.repeat(dotsCount);
+            }, 300);
+            
+            let fullStory = '';
+            let finalData = null;
+            
+            try {
+                const response = await fetch('/api/execute_action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: action,
+                        style: style,
+                        game_data: gameData,
+                        history: getHistoryForAPI()
+                    })
+                });
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data.type === 'chunk') {
+                                    // 流式显示剧情文字
+                                    fullStory += data.content;
+                                    streamingText.textContent = fullStory;
+                                    scrollToBottom();
+                                } else if (data.type === 'done') {
+                                    // 接收完整数据
+                                    finalData = data;
+                                }
+                            } catch (e) {
+                                console.log('解析SSE数据失败:', e);
+                            }
+                        }
+                    }
+                }
+                
+                // 停止等待动画
+                clearInterval(dotsAnimation);
+                loadingDots.style.display = 'none';
+                
+                if (finalData) {
+                    // 检查是否是备用数据
+                    if (finalData.fallback) {
+                        showRetryButton('使用备用方案');
+                    }
+                    
+                    // 更新对话历史（包含摘要机制）
+                    await updateConversationHistory(action, finalData.story);
+
+                    // 应用属性变动（实际更新数据+显示）
+                    if (finalData.attribute_changes) {
+                        applyAttributeChanges(finalData.attribute_changes);
+                        displayAttributeChanges(finalData.attribute_changes);
+                    }
+
+                    // 刷新行动建议（基于最新剧情历史）
+                    refreshSuggestions();
+                } else {
+                    showRetryButton('解析失败');
+                }
+            } catch (error) {
+                clearInterval(dotsAnimation);
+                loadingDots.style.display = 'none';
+                showRetryButton('请求失败');
+                addStoryMessage('请求失败: ' + error.message, 'error');
+            }
+            
+            isProcessing = false;
+        }
+        
+        // 显示重试按钮
+        function showRetryButton(reason) {
+            const storyDisplay = document.getElementById('storyDisplay');
+            const retryDiv = document.createElement('div');
+            retryDiv.className = 'retry-container';
+            retryDiv.innerHTML = `
+                <span class="retry-reason">${reason}</span>
+                <button class="retry-btn" onclick="retryLastAction()">回退操作</button>
+            `;
+            storyDisplay.appendChild(retryDiv);
+            scrollToBottom();
+        }
+        
+        // 隐藏重试按钮
+        function hideRetryButton() {
+            const existingRetry = document.querySelector('.retry-container');
+            if (existingRetry) {
+                existingRetry.remove();
+            }
+        }
+        
+        // 回退操作
+        function retryLastAction() {
+            if (previousGameData) {
+                gameData = previousGameData;
+                conversationHistory = previousConversationHistory;
+                conversationSummary = previousConversationSummary;
+
+                // 重新显示属性
+                updateAttributeDisplay(gameData.emperor);
+                displayCharacters();
+
+                // 恢复行动建议（使用之前保存的状态）
+                updateSuggestions(previousSuggestions);
+
+                // 保存回退后的数据
+                saveGameData();
+
+                // 移除当前行动的消息（用户消息和回复）
+                const messages = document.querySelectorAll('.story-message');
+                if (messages.length >= 2) {
+                    messages[messages.length - 1].remove();
+                    messages[messages.length - 2].remove();
+                }
+
+                // 隐藏重试按钮
+                hideRetryButton();
+            }
+        }
+        
+        // 显示属性变动（在剧情下方）
+        function displayAttributeChanges(changes) {
+            let changeText = '';
+
+            // 皇帝属性变动（只显示有变化的）
+            if (changes.emperor) {
+                const emperorChanges = [];
+                for (const [key, value] of Object.entries(changes.emperor)) {
+                    if (value !== 0) {
+                        const name = getAttributeName(key);
+                        const sign = value > 0 ? '+' : '';
+                        const colorClass = value > 0 ? 'change-positive' : 'change-negative';
+                        emperorChanges.push(`<span class="${colorClass}">${name}${sign}${value}</span>`);
+                    }
+                }
+                if (emperorChanges.length > 0) {
+                    changeText += `<span class="change-emperor">皇帝: ${emperorChanges.join(' ')}</span>`;
+                }
+            }
+
+            // 人物属性变动（只显示有变化的）
+            if (changes.characters) {
+                changes.characters.forEach(change => {
+                    let personChanges = [];
+
+                    // 心境变动
+                    if (change.mood) {
+                        personChanges.push(`<span class="change-mood">${change.mood}</span>`);
+                    }
+
+                    // 想法变动
+                    if (change.thought) {
+                        const shortThought = change.thought.length > 12 ? change.thought.substring(0, 12) + '...' : change.thought;
+                        personChanges.push(`<span class="change-thought">${shortThought}</span>`);
+                    }
+
+                    // 好感度变动（只显示非0的）
+                    if (change.favorability !== undefined && change.favorability !== 0) {
+                        const sign = change.favorability > 0 ? '+' : '';
+                        const colorClass = change.favorability > 0 ? 'change-positive' : 'change-negative';
+                        personChanges.push(`<span class="${colorClass}">好感${sign}${change.favorability}</span>`);
+                    }
+
+                    // 真心度变动（只显示非0的）
+                    if (change.sincerity !== undefined && change.sincerity !== 0) {
+                        const sign = change.sincerity > 0 ? '+' : '';
+                        const colorClass = change.sincerity > 0 ? 'change-positive' : 'change-negative';
+                        personChanges.push(`<span class="${colorClass}">真心${sign}${change.sincerity}</span>`);
+                    }
+
+                    // 位份变动
+                    if (change.rank) {
+                        personChanges.push(`<span class="change-rank-new">晋封${change.rank}</span>`);
+                    }
+
+                    if (personChanges.length > 0) {
+                        changeText += `<span class="change-person">${change.name}: ${personChanges.join(' ')}</span>`;
+                    }
+                });
+            }
+
+            if (changeText) {
+                document.getElementById('attributeChangesText').innerHTML = changeText;
+                document.getElementById('attributeChanges').style.display = 'block';
+            }
+        }
+
+        // 添加故事消息
+        function addStoryMessage(content, type) {
+            const storyDisplay = document.getElementById('storyDisplay');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `story-message story-${type}`;
+            
+            if (type === 'user') {
+                messageDiv.innerHTML = `<strong>【玩家】</strong>${content}`;
+            } else if (type === 'assistant') {
+                messageDiv.innerHTML = `<strong>【剧情】</strong>${content}`;
+            } else {
+                messageDiv.innerHTML = `<span class="error">${content}</span>`;
+            }
+            
+            storyDisplay.appendChild(messageDiv);
+            scrollToBottom();
+        }
+
+        // 滚动到底部
+        function scrollToBottom() {
+            const storyDisplay = document.getElementById('storyDisplay');
+            storyDisplay.scrollTop = storyDisplay.scrollHeight;
+        }
+
+        // 应用属性变动（更新本地数据）
+        function applyAttributeChanges(changes) {
+            // 更新皇帝属性
+            if (changes.emperor) {
+                const emperor = gameData.emperor;
+                for (const [key, value] of Object.entries(changes.emperor)) {
+                    if (value !== 0) {
+                        emperor[key] = Math.max(1, Math.min(100, emperor[key] + value));
+                    }
+                }
+                updateAttributeDisplay(emperor);
+            }
+
+            // 更新人物属性（心境、想法、好感度、真心度、品级）
+            if (changes.characters) {
+                changes.characters.forEach(change => {
+                    const character = gameData.characters[findCharacterIndex(change.name)];
+                    if (character) {
+                        if (change.mood) {
+                            character.mood = change.mood;
+                        }
+                        if (change.thought) {
+                            character.thought = change.thought;
+                        }
+                        if (change.favorability !== undefined) {
+                            character.favorability = Math.max(-100, Math.min(100, (character.favorability || 0) + change.favorability));
+                        }
+                        if (change.sincerity !== undefined) {
+                            character.sincerity = Math.max(-100, Math.min(100, (character.sincerity || 0) + change.sincerity));
+                        }
+                        if (change.rank) {
+                            character.rank = change.rank;
+                        }
+                    }
+                });
+                displayCharacters();
+            }
+
+            // 保存更新后的数据到后端
+            saveGameData();
+        }
+
+        // 获取属性中文名
+        function getAttributeName(key) {
+            const names = {
+                'talent': '才华',
+                'martial': '武力',
+                'appearance': '容貌',
+                'morality': '道德'
+            };
+            return names[key] || key;
+        }
+
+        // 查找人物索引
+        function findCharacterIndex(name) {
+            return gameData.characters.findIndex(c => c.name === name);
+        }
+
+        // 保存游戏数据到服务器和localStorage
+        async function saveGameData() {
+            // 保存到localStorage
+            localStorage.setItem('suhu_game_data', JSON.stringify(gameData));
+            
+            // 同时尝试保存到服务器
+            try {
+                await fetch('/api/save_game_data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ game_data: gameData })
+                });
+            } catch (error) {
+                console.error('服务器保存失败:', error);
+            }
+        }
+
+        // 显示提示
+        function showToast(message) {
+            const toast = document.getElementById('attributeToast');
+            toast.textContent = message;
+            toast.className = 'toast show';
+            setTimeout(() => {
+                toast.className = 'toast';
+            }, 3000);
+        }
+
+        // 回车发送
+        document.getElementById('actionInput')?.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                submitAction();
+            }
+        });
+
+        // 加载数据
+        loadGameData();
+    </script>
+</body>
+</html>

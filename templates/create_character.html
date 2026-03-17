@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创建角色 - 皇帝后宫模拟器</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Logo区域 -->
+        <header class="header">
+            <a href="/" class="logo">SUHU | 素狐科技</a>
+        </header>
+
+        <!-- 角色创建区 -->
+        <main class="character-creation">
+            <h1 class="title">创建你的皇帝角色</h1>
+            
+            <form id="characterForm" class="character-form">
+                <div class="form-group">
+                    <label for="emperorName">皇帝姓名</label>
+                    <input type="text" id="emperorName" name="emperorName" value="乾隆皇帝" required>
+                </div>
+
+                <div class="form-group">
+                    <label>性别</label>
+                    <div class="radio-group">
+                        <label class="radio-label">
+                            <input type="radio" name="gender" value="男" checked>
+                            <span>男</span>
+                        </label>
+                        <label class="radio-label">
+                            <input type="radio" name="gender" value="女">
+                            <span>女</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="concubineCount">初始妃子数量 (1-5)</label>
+                    <input type="number" id="concubineCount" name="concubineCount" value="3" min="1" max="5" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="heirCount">初始皇嗣数量 (0-3)</label>
+                    <input type="number" id="heirCount" name="heirCount" value="1" min="0" max="3" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="background">人物背景</label>
+                    <textarea id="background" name="background" rows="3">世袭继承皇位</textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-back" onclick="window.location.href='/'">返回</button>
+                    <button type="submit" class="btn-start">开始游戏</button>
+                </div>
+            </form>
+
+            <!-- 加载提示 -->
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>正在初始化游戏世界...</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.getElementById('characterForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const emperorName = document.getElementById('emperorName').value;
+            const gender = document.querySelector('input[name="gender"]:checked').value;
+            const concubineCount = document.getElementById('concubineCount').value;
+            const heirCount = document.getElementById('heirCount').value;
+            const background = document.getElementById('background').value;
+
+            // 验证妃子数量
+            if (concubineCount < 1 || concubineCount > 5) {
+                alert('妃子数量必须在1-5之间');
+                return;
+            }
+
+            // 验证皇嗣数量
+            if (heirCount < 0 || heirCount > 3) {
+                alert('皇嗣数量必须在0-3之间');
+                return;
+            }
+            
+            // 显示加载
+            document.getElementById('characterForm').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/init_game', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        emperor_name: emperorName,
+                        gender: gender,
+                        concubine_count: concubineCount,
+                        heir_count: heirCount,
+                        background: background
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 保存到localStorage
+                    if (result.data) {
+                        localStorage.setItem('suhu_game_data', JSON.stringify(result.data));
+                    }
+                    window.location.href = '/game/{{ game_type }}';
+                } else {
+                    alert('游戏初始化失败: ' + result.error);
+                    document.getElementById('characterForm').style.display = 'block';
+                    document.getElementById('loading').style.display = 'none';
+                }
+            } catch (error) {
+                alert('请求失败: ' + error.message);
+                document.getElementById('characterForm').style.display = 'block';
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

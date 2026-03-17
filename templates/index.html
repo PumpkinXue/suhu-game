@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SUHU | 素狐科技 - 游戏入口</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Logo区域 -->
+        <header class="header">
+            <div class="logo">SUHU | 素狐科技</div>
+        </header>
+
+        <!-- 剧本选择区 -->
+        <main class="game-selection">
+            <h1 class="title">选择剧本</h1>
+            <div class="game-cards">
+                <div class="game-card" onclick="selectGame('imperial_harem')">
+                    <div class="game-icon">👑</div>
+                    <h2>皇帝后宫模拟器</h2>
+                    <p>体验帝王生活，掌控后宫风云</p>
+                </div>
+                <!-- 后续可添加更多剧本 -->
+                <div class="game-card disabled">
+                    <div class="game-icon">🔒</div>
+                    <h2>更多剧本</h2>
+                    <p>敬请期待...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function selectGame(gameType) {
+            if (gameType === 'imperial_harem') {
+                window.location.href = '/create_character/imperial_harem';
+            }
+        }
+    </script>
+</body>
+</html>

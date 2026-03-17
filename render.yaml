@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: suhu-game
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    envVars:
+      - key: API_KEY
+        value: sk-cfc36fb7d5d94dd48c48dce8fde9eef2
+      - key: BASE_URL
+        value: https://api.deepseek.com/v1
