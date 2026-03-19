@@ -1,4 +1,4 @@
-/* 全局样式 */
+/* 全局样式 - 古典雅致主题 */
 * {
     margin: 0;
     padding: 0;
@@ -6,25 +6,41 @@
 }
 
 :root {
-    --primary-color: #e74c3c;
-    --primary-light: #f5b7b1;
-    --secondary-color: #3498db;
-    --accent-color: #f39c12;
-    --bg-color: #f8f9fa;
-    --bg-card: #ffffff;
-    --text-main: #2c3e50;
-    --text-light: #7f8c8d;
-    --border-color: #dfe6e9;
-    --shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-    --shadow-hover: 0 8px 25px rgba(0, 0, 0, 0.12);
+    /* 古典中国风配色 */
+    --primary-color: #8B4513;        /* 绛红 - 主色调 */
+    --primary-light: #CD853F;        /* 淡金 */
+    --primary-dark: #5D2E0C;         /* 深绛 */
+    --secondary-color: #2F4F4F;      /* 墨绿 - 皇嗣 */
+    --accent-color: #B8860B;          /* 金色 */
+    --bg-color: #FAF8F5;              /* 米白 - 背景 */
+    --bg-card: #FFFFFF;              /* 卡片白 */
+    --bg-card-alt: #FDFBF7;           /* 卡片米白 */
+    --text-main: #2C2C2C;             /* 墨色 */
+    --text-light: #6B6B6B;            /* 淡墨 */
+    --text-muted: #9B9B9B;           /* 浅灰 */
+    --border-color: #E8E4DD;          /* 淡边框 */
+    --border-light: #F0ECE6;          /* 浅边框 */
+    --shadow: 0 2px 12px rgba(139, 69, 19, 0.08);
+    --shadow-hover: 0 8px 24px rgba(139, 69, 19, 0.15);
+    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.06);
+
+    /* 状态色 */
+    --success: #4A7C59;               /* 青绿 */
+    --warning: #C9A227;               /* 暗金 */
+    --danger: #A52A2A;                /* 暗红 */
+
+    /* 间距 */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
 }
 
 body {
     font-family: 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: linear-gradient(135deg, #f5f7fa 0%, #e8ecef 50%, #dfe9f3 100%);
+    background: linear-gradient(180deg, #FAF8F5 0%, #F5F2ED 100%);
     min-height: 100vh;
     color: var(--text-main);
-    line-height: 1.6;
+    line-height: 1.7;
 }
 
 .container {
@@ -36,25 +52,87 @@ body {
 
 /* Header & Logo */
 .header {
-    padding: 15px 0;
-    margin-bottom: 20px;
+    padding: 20px 0;
+    margin-bottom: 25px;
+    border-bottom: 1px solid var(--border-light);
+    background: linear-gradient(180deg, var(--bg-card) 0%, transparent 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header .logo {
+    flex: 1;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.save-btn {
+    padding: 8px 18px;
+    background: linear-gradient(135deg, var(--success), #3d6b4f);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: white;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    font-weight: 500;
+}
+
+.save-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(74, 124, 89, 0.35);
+}
+
+.exit-btn {
+    padding: 8px 18px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-light);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.exit-btn:hover {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
 }
 
 .logo {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--primary-color);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--primary-dark);
     text-decoration: none;
-    letter-spacing: 2px;
-    padding: 10px 15px;
-    border-left: 4px solid var(--primary-color);
+    letter-spacing: 3px;
+    padding: 8px 0;
     display: inline-block;
     transition: all 0.3s ease;
+    position: relative;
+}
+
+.logo::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 40px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+    transition: width 0.3s ease;
 }
 
 .logo:hover {
-    color: var(--accent-color);
-    border-left-color: var(--accent-color);
+    color: var(--primary-color);
+}
+
+.logo:hover::after {
+    width: 60px;
 }
 
 /* 标题 */
@@ -263,39 +341,42 @@ body {
     padding: 15px 0;
 }
 
-/* 标签页 */
+/* 标签页 - 古典风格 */
 .tabs {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     margin-bottom: 25px;
     background: var(--bg-card);
-    padding: 10px;
-    border-radius: 12px;
-    box-shadow: var(--shadow);
+    padding: 8px;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-light);
 }
 
 .tab-btn {
     flex: 1;
-    padding: 12px 20px;
-    font-size: 15px;
+    padding: 12px 16px;
+    font-size: 14px;
     background: transparent;
     border: none;
     color: var(--text-light);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
     font-weight: 500;
     font-family: inherit;
+    letter-spacing: 1px;
 }
 
 .tab-btn:hover {
-    background: #f0f0f0;
+    background: var(--bg-color);
     color: var(--text-main);
 }
 
 .tab-btn.active {
-    background: var(--primary-color);
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
     color: white;
+    box-shadow: 0 2px 8px rgba(139, 69, 19, 0.25);
 }
 
 .tab-content {
@@ -312,23 +393,38 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* 皇帝卡片 */
+/* 皇帝卡片 - 古典风格 */
 .emperor-card {
     background: var(--bg-card);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     padding: 28px;
     max-width: 550px;
     margin: 0 auto;
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-light);
+    position: relative;
+    overflow: hidden;
+}
+
+.emperor-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color), var(--primary-light), var(--primary-color));
 }
 
 .emperor-card h2 {
     color: var(--text-main);
-    font-size: 22px;
+    font-size: 20px;
     margin-bottom: 20px;
     text-align: center;
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 1px solid var(--border-light);
     padding-bottom: 15px;
+    font-weight: 600;
+    letter-spacing: 2px;
 }
 
 .emperor-info {
@@ -411,55 +507,206 @@ body {
 }
 
 .empty-hint {
-    color: var(--text-light);
+    color: var(--text-muted);
     font-size: 14px;
     text-align: center;
-    padding: 20px;
+    padding: 40px 20px;
     grid-column: 1 / -1;
 }
 
+/* 人物卡片 - 古典精致风格 */
 .concubine-card {
     background: var(--bg-card);
-    border-radius: 12px;
-    padding: 22px;
+    border-radius: var(--radius-md);
+    padding: 18px;
     text-align: center;
     cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: var(--shadow);
+    transition: all 0.25s ease;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-light);
+    position: relative;
+    overflow: hidden;
+}
+
+.concubine-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary-color), var(--primary-light));
+    opacity: 0;
+    transition: opacity 0.25s ease;
 }
 
 .concubine-card:hover {
-    transform: translateY(-5px);
+    transform: translateY(-4px);
     box-shadow: var(--shadow-hover);
 }
 
-.concubine-card.heir-card {
-    border-top: 3px solid var(--secondary-color);
+.concubine-card:hover::before {
+    opacity: 1;
 }
 
 .concubine-avatar {
-    font-size: 42px;
-    margin-bottom: 12px;
+    font-size: 36px;
+    margin-bottom: 10px;
+    display: inline-block;
+    width: 60px;
+    height: 60px;
+    line-height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--bg-color), var(--border-light));
 }
 
 .concubine-name {
     color: var(--text-main);
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
+    letter-spacing: 1px;
+}
+
+.rank-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--primary-light), var(--primary-color));
+    color: white;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-bottom: 10px;
+    font-weight: 500;
 }
 
 .concubine-brief {
     color: var(--text-light);
-    font-size: 13px;
+    font-size: 12px;
+    margin-bottom: 8px;
+    line-height: 1.5;
 }
 
 .concubine-mood {
-    color: var(--text-light);
-    font-size: 12px;
+    color: var(--text-muted);
+    font-size: 11px;
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-light);
+}
+
+/* 人物属性数值 */
+.stat-values {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 8px;
+}
+
+.stat-value-item {
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.stat-value-item .stat-icon {
+    color: var(--danger);
+    margin-right: 3px;
+}
+
+.stat-value-item.sincer .stat-icon {
+    color: var(--warning);
+}
+
+/* 人物卡片删除按钮 */
+.person-name-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.delete-btn {
+    background: var(--bg-card);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+    cursor: pointer;
+    opacity: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    font-weight: 500;
+}
+
+.concubine-card:hover .delete-btn {
+    opacity: 1;
+}
+
+.delete-btn:hover {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+    transform: scale(1.1);
+}
+
+/* 新人物通知栏 - 古典风格 */
+.new-character-notification {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+    color: white;
+    padding: 14px 28px;
+    border-radius: var(--radius-lg);
+    font-size: 15px;
+    font-weight: 500;
+    box-shadow: 0 6px 20px rgba(139, 69, 19, 0.25);
+    z-index: 10000;
+    animation: slideDown 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    letter-spacing: 1px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.new-character-notification::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.1) 50%, transparent 60%);
+    pointer-events: none;
+}
+
+.new-character-notification.fade-out {
+    animation: fadeOut 0.4s ease forwards;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-20px);
+    }
 }
 
 /* 身份徽章样式 */
@@ -593,14 +840,17 @@ body {
     font-weight: 600;
 }
 
-/* 精简的属性变动显示区域 */
+/* 精简的属性变动显示区域 - 古典风格 */
 .attribute-changes {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 10px 14px;
-    margin: 10px 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-light);
+    border-left: 3px solid var(--success);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    margin: 12px 0;
     font-size: 13px;
     line-height: 1.8;
+    box-shadow: var(--shadow-card);
 }
 
 /* 皇帝属性变动 */
@@ -652,16 +902,17 @@ body {
 
 .modal-content {
     background: var(--bg-card);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
     margin: 8% auto;
     padding: 28px;
     max-width: 450px;
     position: relative;
-    animation: slideDown 0.3s ease;
+    animation: slideDownModal 0.3s ease;
     box-shadow: var(--shadow-hover);
+    border: 1px solid var(--border-light);
 }
 
-@keyframes slideDown {
+@keyframes slideDownModal {
     from { transform: translateY(-30px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
 }
@@ -670,7 +921,7 @@ body {
     position: absolute;
     right: 18px;
     top: 12px;
-    color: var(--text-light);
+    color: var(--text-muted);
     font-size: 28px;
     font-weight: bold;
     cursor: pointer;
@@ -684,11 +935,13 @@ body {
 
 .modal-content h2 {
     color: var(--text-main);
-    font-size: 22px;
+    font-size: 20px;
     margin-bottom: 22px;
     text-align: center;
-    border-bottom: 2px solid var(--border-color);
+    border-bottom: 1px solid var(--border-light);
     padding-bottom: 14px;
+    font-weight: 600;
+    letter-spacing: 1px;
 }
 
 .modal-details p {
@@ -713,15 +966,16 @@ body {
     gap: 18px;
 }
 
-/* 文字展示区 */
+/* 文字展示区 - 古典风格 */
 .story-display {
     background: var(--bg-card);
-    border-radius: 14px;
+    border-radius: var(--radius-md);
     padding: 22px;
     min-height: 280px;
     max-height: 380px;
     overflow-y: auto;
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-light);
 }
 
 .story-welcome {
@@ -760,26 +1014,29 @@ body {
     border-left: 4px solid #e74c3c;
 }
 
-/* 行动建议区 */
+/* 行动建议区 - 古典风格 */
 .action-suggestions {
     background: var(--bg-card);
-    border-radius: 14px;
-    padding: 18px;
-    box-shadow: var(--shadow);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-light);
+    margin-top: 20px;
 }
 
 .action-suggestions h3 {
     color: var(--text-main);
-    font-size: 16px;
-    margin-bottom: 14px;
+    font-size: 15px;
+    margin-bottom: 16px;
     text-align: center;
     font-weight: 600;
+    letter-spacing: 1px;
 }
 
 .suggestion-buttons {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
+    gap: 10px;
 }
 
 .suggestion-btn {
@@ -787,18 +1044,19 @@ body {
     flex-direction: column;
     gap: 6px;
     padding: 14px;
-    background: #f8f9fa;
-    border: 2px solid var(--border-color);
-    border-radius: 10px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
     text-align: left;
 }
 
 .suggestion-btn:hover {
     transform: translateY(-2px);
     box-shadow: var(--shadow);
-    border-color: var(--primary-color);
+    border-color: var(--primary-light);
+    background: var(--bg-card);
 }
 
 .suggestion-btn .style-tag {
@@ -810,76 +1068,81 @@ body {
 }
 
 .suggestion-btn.gentle .style-tag {
-    background: #fce4ec;
-    color: #e91e63;
+    background: #FCE4EC;
+    color: #AD1457;
 }
 
 .suggestion-btn.aggressive .style-tag {
-    background: #fbe9e7;
-    color: #ff5722;
+    background: #FBE9E7;
+    color: #BF360C;
 }
 
 .suggestion-btn.calm .style-tag {
-    background: #e3f2fd;
-    color: #2196f3;
+    background: #E8EAF6;
+    color: #283593;
 }
 
 .suggestion-btn.random .style-tag {
-    background: #f3e5f5;
-    color: #9c27b0;
+    background: #F3E5F5;
+    color: #6A1B9A;
 }
 
 .suggestion-btn span:last-child {
     color: var(--text-main);
     font-size: 13px;
+    font-weight: 500;
 }
 
-/* 输入区 */
+/* 输入区 - 古典风格 */
 .input-area {
     display: flex;
     gap: 12px;
     align-items: flex-end;
+    margin-top: 20px;
 }
 
 .input-area textarea {
     flex: 1;
-    padding: 14px;
+    padding: 14px 16px;
     background: var(--bg-card);
-    border: 2px solid var(--border-color);
-    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
     color: var(--text-main);
     font-size: 14px;
     resize: none;
     font-family: inherit;
     min-height: 50px;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .input-area textarea:focus {
     outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+    border-color: var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(205, 133, 63, 0.15);
 }
 
 .input-area textarea::placeholder {
-    color: #bdc3c7;
+    color: var(--text-muted);
 }
 
 .btn-send {
-    padding: 14px 25px;
-    background: linear-gradient(135deg, var(--primary-color), #c0392b);
+    padding: 14px 28px;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-md);
     color: white;
     font-size: 15px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.25s ease;
     font-family: inherit;
+    letter-spacing: 1px;
+    box-shadow: 0 2px 8px rgba(139, 69, 19, 0.2);
 }
 
 .btn-send:hover {
     transform: translateY(-2px);
-    box-shadow: 0 5px 20px rgba(231, 76, 60, 0.4);
+    box-shadow: 0 4px 16px rgba(139, 69, 19, 0.3);
 }
 
 .btn-send:disabled {
@@ -1088,4 +1351,111 @@ body {
     .action-suggestions h3 {
         font-size: 14px;
     }
+}
+
+/* 自定义确认对话框 */
+.confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.confirm-dialog {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    max-width: 360px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    animation: slideDownModal 0.25s ease;
+}
+
+.confirm-dialog h3 {
+    margin: 0 0 16px;
+    font-size: 18px;
+    color: var(--text-main);
+    text-align: center;
+    font-weight: 600;
+}
+
+.confirm-dialog p {
+    margin: 0 0 24px;
+    font-size: 14px;
+    color: var(--text-light);
+    line-height: 1.6;
+    text-align: center;
+}
+
+.confirm-dialog .confirm-cancel {
+    padding: 10px 24px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    color: var(--text-light);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.confirm-dialog .confirm-cancel:hover {
+    background: var(--bg-color);
+    border-color: var(--text-muted);
+}
+
+.confirm-dialog .confirm-ok {
+    padding: 10px 24px;
+    border: none;
+    background: linear-gradient(135deg, var(--danger), #8B0000);
+    border-radius: var(--radius-sm);
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.confirm-dialog .confirm-ok:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(165, 42, 42, 0.3);
+}
+
+/* 打断按钮样式 */
+.btn-send.btn-abort {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.25);
+    animation: pulse-abort 1.2s ease-in-out infinite;
+}
+
+.btn-send.btn-abort:hover {
+    box-shadow: 0 4px 16px rgba(231, 76, 60, 0.4);
+    transform: translateY(-2px);
+}
+
+@keyframes pulse-abort {
+    0%, 100% { box-shadow: 0 2px 8px rgba(231, 76, 60, 0.25); }
+    50% { box-shadow: 0 2px 16px rgba(231, 76, 60, 0.55); }
+}
+
+/* 空窗期建议按钮禁用状态 */
+.suggestion-btn.btn-disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* 空窗期计秒提示文字 */
+.loading-dots {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-style: italic;
+    margin-left: 2px;
 }

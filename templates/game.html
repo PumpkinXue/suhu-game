@@ -10,7 +10,11 @@
     <div class="container">
         <!-- Logo区域 -->
         <header class="header">
-            <a href="/" class="logo">SUHU | 素狐科技</a>
+            <span class="logo">SUHU | 素狐科技</span>
+            <div class="header-buttons">
+                <button class="save-btn" onclick="manualSave()">存档</button>
+                <button class="exit-btn" onclick="exitGame()">退出游戏</button>
+            </div>
         </header>
 
         <!-- 游戏主界面 -->
@@ -124,7 +128,7 @@
                     <!-- 输入区 -->
                     <div class="input-area">
                         <textarea id="actionInput" placeholder="描述您的行动..." rows="3"></textarea>
-                        <button class="btn-send" onclick="submitAction()">发送</button>
+                        <button id="sendBtn" class="btn-send" onclick="submitAction()">发送</button>
                     </div>
                 </div>
             </section>
@@ -179,39 +183,43 @@
         let gameData = null;
         let conversationHistory = [];  // 最近3条原始对话
         let conversationSummary = [];  // 更早的对话摘要（15字以内，最多20条）
+        let currentSuggestions = { gentle: '-', aggressive: '-', calm: '-', random: '-' };  // 当前行动建议
         let isProcessing = false;
+        let currentAbortController = null;  // 用于打断请求
+        let waitingTimerInterval = null;    // 空窗期计秒定时器
 
         // 页面加载时获取游戏数据（优先从localStorage读取）
         async function loadGameData() {
             console.log('开始加载游戏数据...');
-            
-            // 尝试从localStorage读取游戏数据
-            const savedData = localStorage.getItem('suhu_game_data');
-            if (savedData) {
-                try {
-                    gameData = JSON.parse(savedData);
-                    console.log('从localStorage加载数据成功');
-                    displayGameData();
+
+            // 尝试从localStorage读取完整存档数据
+            if (loadFullSaveData()) {
+                console.log('从localStorage加载完整存档成功');
+                displayGameData();
+                // 恢复对话历史显示
+                restoreConversationHistory();
+                // 判断是否有已保存的有效行动建议，没有则重新生成
+                if (hasSavedSuggestions()) {
+                    restoreSuggestions();
+                } else {
                     loadInitialSuggestions();
-                    document.getElementById('loading').style.display = 'none';
-                    return;
-                } catch (e) {
-                    console.error('解析localStorage数据失败:', e);
                 }
+                document.getElementById('loading').style.display = 'none';
+                return;
             }
-            
+
             // 如果没有本地数据，尝试从服务器获取
             try {
                 const response = await fetch('/api/get_game_data');
                 console.log('响应状态:', response.status);
-                
+
                 if (!response.ok) {
                     throw new Error('HTTP错误: ' + response.status);
                 }
-                
+
                 const result = await response.json();
                 console.log('返回数据:', result);
-                
+
                 if (result.success) {
                     gameData = result.data;
                     // 保存到localStorage
@@ -229,6 +237,52 @@
                 alert('加载失败: ' + error.message);
                 window.location.href = '/';
             }
+        }
+
+        // 判断存档中是否有有效的行动建议（至少有一条不是 '-'）
+        function hasSavedSuggestions() {
+            const s = currentSuggestions;
+            return s && (s.gentle !== '-' || s.aggressive !== '-' || s.calm !== '-' || s.random !== '-');
+        }
+
+        // 恢复对话历史显示
+        function restoreConversationHistory() {
+            const storyDisplay = document.getElementById('storyDisplay');
+
+            // 清除欢迎信息
+            const welcomeMsg = storyDisplay.querySelector('.story-welcome');
+            if (welcomeMsg) {
+                welcomeMsg.remove();
+            }
+
+            // 恢复所有历史对话（摘要 + 原始对话）
+            // 先显示摘要
+            conversationSummary.forEach(item => {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'story-message story-summary';
+                msgDiv.innerHTML = `<strong>【回顾】</strong>${item.summary}`;
+                storyDisplay.appendChild(msgDiv);
+            });
+
+            // 再显示原始对话
+            conversationHistory.forEach(item => {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `story-message story-${item.role}`;
+                if (item.role === 'user') {
+                    msgDiv.innerHTML = `<strong>【玩家】</strong>${item.content}`;
+                } else {
+                    msgDiv.innerHTML = `<strong>【剧情】</strong>${item.content}`;
+                }
+                storyDisplay.appendChild(msgDiv);
+            });
+
+            // 滚动到底部
+            scrollToBottom();
+        }
+
+        // 恢复行动建议（从存档恢复，不重新生成）
+        function restoreSuggestions() {
+            updateSuggestions(currentSuggestions);
         }
 
         // 显示游戏数据
@@ -275,11 +329,11 @@
             characters.forEach((character, index) => {
                 const card = document.createElement('div');
                 card.className = 'concubine-card';
-                // 根据类型添加不同的样式
-                if (character.type === '皇嗣') {
-                    card.className = 'concubine-card heir-card';
-                }
-                card.onclick = () => showCharacterDetail(index);
+                card.onclick = (e) => {
+                    // 如果点击的是删除按钮，不打开详情
+                    if (e.target.classList.contains('delete-btn')) return;
+                    showCharacterDetail(index);
+                };
 
                 // 根据性别显示不同的图标
                 let genderIcon = '👩';
@@ -296,6 +350,7 @@
                     <div class="concubine-avatar">${genderIcon}</div>
                     <div class="person-name-row">
                         <div class="concubine-name">${character.name}</div>
+                        <button class="delete-btn" onclick="event.stopPropagation(); deleteCharacter(${index})" title="删除此人">X</button>
                     </div>
                     <div class="rank-badge">${character.rank || ''}</div>
                     <div class="concubine-brief">${character.personality}</div>
@@ -407,6 +462,14 @@
             document.getElementById('suggestion2').textContent = suggestions.aggressive || '-';
             document.getElementById('suggestion3').textContent = suggestions.calm || '-';
             document.getElementById('suggestion4').textContent = suggestions.random || '-';
+
+            // 更新当前行动建议变量，用于存档保存
+            currentSuggestions = {
+                gentle: suggestions.gentle || '-',
+                aggressive: suggestions.aggressive || '-',
+                calm: suggestions.calm || '-',
+                random: suggestions.random || '-'
+            };
         }
 
         // 刷新行动建议（基于最新剧情历史）
@@ -457,6 +520,13 @@
             
             await executeAction(action, 'custom');
             input.value = '';
+        }
+
+        // 打断当前请求
+        function abortAction() {
+            if (currentAbortController) {
+                currentAbortController.abort();
+            }
         }
 
         // 保存当前状态用于回退
@@ -531,6 +601,50 @@
             }
         }
         
+        // ——— 空窗期状态管理 ———
+        function enterProcessingMode() {
+            // 禁用四个建议按钮
+            document.querySelectorAll('.suggestion-btn').forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('btn-disabled');
+            });
+            // 发送按钮变为打断按钮
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.textContent = '打断';
+            sendBtn.classList.add('btn-abort');
+            sendBtn.onclick = abortAction;
+        }
+
+        function exitProcessingMode() {
+            // 恢复四个建议按钮
+            document.querySelectorAll('.suggestion-btn').forEach(btn => {
+                btn.disabled = false;
+                btn.classList.remove('btn-disabled');
+            });
+            // 恢复发送按钮
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.textContent = '发送';
+            sendBtn.classList.remove('btn-abort');
+            sendBtn.onclick = submitAction;
+            // 清除计秒
+            if (waitingTimerInterval) {
+                clearInterval(waitingTimerInterval);
+                waitingTimerInterval = null;
+            }
+        }
+
+        // 进入空窗期（story结束，开始等待JSON整理）
+        function enterWaitingMode(loadingDots) {
+            // 停止省略号动画，开始计秒
+            let seconds = 0;
+            // 立刻显示初始文字
+            loadingDots.textContent = '... 结果整理中，已等待 0 秒';
+            waitingTimerInterval = setInterval(() => {
+                seconds++;
+                loadingDots.textContent = `... 结果整理中，已等待 ${seconds} 秒`;
+            }, 1000);
+        }
+
         // 执行行动（流式版本）
         async function executeAction(action, style) {
             isProcessing = true;
@@ -544,6 +658,9 @@
             // 隐藏之前的属性变动和错误按钮
             document.getElementById('attributeChanges').style.display = 'none';
             hideRetryButton();
+
+            // 进入处理模式（禁用建议按钮，显示打断按钮）
+            enterProcessingMode();
             
             // 显示用户行动
             addStoryMessage(action, 'user');
@@ -567,6 +684,9 @@
             
             let fullStory = '';
             let finalData = null;
+
+            // 创建AbortController用于打断
+            currentAbortController = new AbortController();
             
             try {
                 const response = await fetch('/api/execute_action', {
@@ -577,11 +697,13 @@
                         style: style,
                         game_data: gameData,
                         history: getHistoryForAPI()
-                    })
+                    }),
+                    signal: currentAbortController.signal
                 });
                 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
+                let storyPhaseEnded = false;  // story流式阶段是否结束
                 
                 while (true) {
                     const { done, value } = await reader.read();
@@ -601,7 +723,12 @@
                                     streamingText.textContent = fullStory;
                                     scrollToBottom();
                                 } else if (data.type === 'done') {
-                                    // 接收完整数据
+                                    // story阶段结束，进入空窗期计秒
+                                    if (!storyPhaseEnded) {
+                                        storyPhaseEnded = true;
+                                        clearInterval(dotsAnimation);
+                                        enterWaitingMode(loadingDots);
+                                    }
                                     finalData = data;
                                 }
                             } catch (e) {
@@ -611,9 +738,10 @@
                     }
                 }
                 
-                // 停止等待动画
+                // 流结束，清理状态
                 clearInterval(dotsAnimation);
                 loadingDots.style.display = 'none';
+                exitProcessingMode();
                 
                 if (finalData) {
                     // 检查是否是备用数据
@@ -630,6 +758,11 @@
                         displayAttributeChanges(finalData.attribute_changes);
                     }
 
+                    // 处理新人物（如果剧情中遇到新人物）
+                    if (finalData.new_character && finalData.new_character.name) {
+                        await handleNewCharacter(finalData.new_character);
+                    }
+
                     // 刷新行动建议（基于最新剧情历史）
                     refreshSuggestions();
                 } else {
@@ -637,12 +770,53 @@
                 }
             } catch (error) {
                 clearInterval(dotsAnimation);
-                loadingDots.style.display = 'none';
-                showRetryButton('请求失败');
-                addStoryMessage('请求失败: ' + error.message, 'error');
+                exitProcessingMode();
+                
+                if (error.name === 'AbortError') {
+                    // 用户主动打断，执行回退
+                    loadingDots.style.display = 'none';
+                    performRollback(storyMessageDiv);
+                } else {
+                    loadingDots.style.display = 'none';
+                    showRetryButton('请求失败');
+                    addStoryMessage('请求失败: ' + error.message, 'error');
+                }
             }
             
+            currentAbortController = null;
             isProcessing = false;
+        }
+
+        // 执行回退（打断后）
+        function performRollback(storyMessageDiv) {
+            if (previousGameData) {
+                gameData = previousGameData;
+                conversationHistory = previousConversationHistory;
+                conversationSummary = previousConversationSummary;
+
+                // 重新显示属性
+                updateAttributeDisplay(gameData.emperor);
+                displayCharacters();
+
+                // 恢复行动建议
+                updateSuggestions(previousSuggestions);
+
+                // 保存回退后的数据
+                saveGameData();
+
+                // 移除本次用户消息和剧情消息
+                const messages = document.querySelectorAll('.story-message');
+                // 删除最后两条消息（玩家行动 + 剧情）
+                for (let i = messages.length - 1; i >= 0 && i >= messages.length - 2; i--) {
+                    messages[i].remove();
+                }
+
+                // 隐藏属性变动
+                document.getElementById('attributeChanges').style.display = 'none';
+
+                // 显示打断提示
+                showToast('已打断并回退到行动前的状态');
+            }
         }
         
         // 显示重试按钮
@@ -844,21 +1018,180 @@
             return gameData.characters.findIndex(c => c.name === name);
         }
 
-        // 保存游戏数据到服务器和localStorage
+        // 处理新人物（添加并显示通知）
+        async function handleNewCharacter(newCharacter) {
+            // 检查人物数量是否已达上限（20人）
+            if (gameData.characters && gameData.characters.length >= 20) {
+                console.log('人物数量已达上限（20人），忽略新人物');
+                return;
+            }
+
+            // 确保characters数组存在
+            if (!gameData.characters) {
+                gameData.characters = [];
+            }
+
+            // 添加新人物到列表末尾
+            gameData.characters.push(newCharacter);
+
+            // 刷新人物显示
+            displayCharacters();
+
+            // 显示通知栏
+            showNewCharacterNotification(newCharacter);
+
+            // 保存数据
+            saveGameData();
+        }
+
+        // 显示新人物通知
+        function showNewCharacterNotification(character) {
+            const notification = document.createElement('div');
+            notification.className = 'new-character-notification';
+            notification.innerHTML = `结识：${character.type || '未知身份'} ${character.name}！`;
+
+            document.body.appendChild(notification);
+
+            // 3秒后自动消失
+            setTimeout(() => {
+                notification.classList.add('fade-out');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 500);
+            }, 3000);
+        }
+
+        // 删除人物
+        function deleteCharacter(index) {
+            const character = gameData.characters[index];
+            if (!character) return;
+
+            showConfirmDialog(
+                '确认删除',
+                `确定要彻底抹去此人信息吗？<br><br><strong>姓名：</strong>${character.name}<br><strong>身份：</strong>${character.type}<br><br><span style="color: #A52A2A;">警告：此操作会导致剧情发展不连贯！</span>`,
+                () => {
+                    // 移除人物
+                    gameData.characters.splice(index, 1);
+
+                    // 刷新显示
+                    displayCharacters();
+
+                    // 保存数据
+                    saveGameData();
+                }
+            );
+        }
+
+        // 自定义确认对话框
+        function showConfirmDialog(title, message, onConfirm) {
+            // 创建遮罩层
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:10001;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s ease;';
+
+            // 创建对话框
+            const dialog = document.createElement('div');
+            dialog.className = 'confirm-dialog';
+            dialog.style.cssText = 'background:#FFFFFF;border-radius:12px;padding:24px;max-width:360px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.2);animation:slideDownModal 0.25s ease;';
+
+            dialog.innerHTML = `
+                <h3 style="margin:0 0 16px;font-size:18px;color:#2C2C2C;text-align:center;font-weight:600;">${title}</h3>
+                <p style="margin:0 0 24px;font-size:14px;color:#6B6B6B;line-height:1.6;text-align:center;">${message}</p>
+                <div style="display:flex;gap:12px;justify-content:center;">
+                    <button class="confirm-cancel" style="padding:10px 24px;border:1px solid #E8E4DD;background:#FFFFFF;border-radius:8px;color:#6B6B6B;font-size:14px;cursor:pointer;transition:all 0.2s ease;">取消</button>
+                    <button class="confirm-ok" style="padding:10px 24px;border:none;background:linear-gradient(135deg,#A52A2A,#8B0000);border-radius:8px;color:#FFFFFF;font-size:14px;cursor:pointer;transition:all 0.2s ease;font-weight:500;">确认删除</button>
+                </div>
+            `;
+
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+
+            // 绑定事件
+            const cancelBtn = dialog.querySelector('.confirm-cancel');
+            const okBtn = dialog.querySelector('.confirm-ok');
+
+            const closeDialog = () => {
+                overlay.style.opacity = '0';
+                setTimeout(() => overlay.remove(), 200);
+            };
+
+            cancelBtn.addEventListener('click', closeDialog);
+            okBtn.addEventListener('click', () => {
+                closeDialog();
+                onConfirm();
+            });
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) closeDialog();
+            });
+        }
+
+        // 手动存档
+        function manualSave() {
+            // 保存当前游戏数据
+            saveGameData();
+            showToast('游戏已手动保存');
+        }
+
+        // 退出游戏（只跳转不删除存档）
+        function exitGame() {
+            // 先保存当前进度
+            saveGameData();
+            // 跳转到首页
+            window.location.href = '/';
+        }
+
+        // 保存游戏数据到服务器和localStorage（包含对话历史和行动建议）
         async function saveGameData() {
+            // 构建完整存档数据
+            const fullSaveData = {
+                gameData: gameData,
+                conversationHistory: conversationHistory,
+                conversationSummary: conversationSummary,
+                currentSuggestions: currentSuggestions
+            };
+
             // 保存到localStorage
-            localStorage.setItem('suhu_game_data', JSON.stringify(gameData));
-            
+            localStorage.setItem('suhu_game_data', JSON.stringify(fullSaveData));
+
             // 同时尝试保存到服务器
             try {
                 await fetch('/api/save_game_data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ game_data: gameData })
+                    body: JSON.stringify({ game_data: fullSaveData })
                 });
             } catch (error) {
                 console.error('服务器保存失败:', error);
             }
+        }
+
+        // 加载完整存档数据
+        function loadFullSaveData() {
+            const savedData = localStorage.getItem('suhu_game_data');
+            if (savedData) {
+                try {
+                    const parsed = JSON.parse(savedData);
+                    // 检查是否包含完整数据结构（新格式）还是只有gameData（旧格式）
+                    if (parsed.gameData) {
+                        gameData = parsed.gameData;
+                        conversationHistory = parsed.conversationHistory || [];
+                        conversationSummary = parsed.conversationSummary || [];
+                        currentSuggestions = parsed.currentSuggestions || { gentle: '-', aggressive: '-', calm: '-', random: '-' };
+                    } else {
+                        // 旧格式只有gameData
+                        gameData = parsed;
+                        conversationHistory = [];
+                        conversationSummary = [];
+                        currentSuggestions = { gentle: '-', aggressive: '-', calm: '-', random: '-' };
+                    }
+                    return true;
+                } catch (e) {
+                    console.error('解析存档失败:', e);
+                }
+            }
+            return false;
         }
 
         // 显示提示

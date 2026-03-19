@@ -5,6 +5,152 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SUHU | 素狐科技 - 游戏入口</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* 存档管理区域 */
+        .save-management {
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-card);
+            border: 1px solid var(--border-light);
+        }
+
+        .save-management h3 {
+            margin: 0 0 16px;
+            font-size: 16px;
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        .save-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .save-btn {
+            padding: 10px 20px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            border-radius: var(--radius-sm);
+            color: var(--text-light);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .save-btn:hover {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .save-btn.upload {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .save-btn.upload input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .save-status {
+            margin-left: auto;
+            font-size: 13px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+        }
+
+        .save-status.has-save {
+            color: var(--success);
+        }
+
+        /* 继续游戏弹窗 */
+        .continue-dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .continue-dialog {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 28px;
+            max-width: 380px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            animation: slideDownModal 0.25s ease;
+            text-align: center;
+        }
+
+        .continue-dialog h3 {
+            margin: 0 0 10px;
+            font-size: 18px;
+            color: var(--text-main);
+            font-weight: 600;
+        }
+
+        .continue-dialog p {
+            margin: 0 0 24px;
+            font-size: 14px;
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+
+        .continue-dialog .dialog-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .continue-dialog .btn {
+            padding: 12px 28px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            font-weight: 500;
+        }
+
+        .continue-dialog .btn-continue {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+            border: none;
+            color: white;
+        }
+
+        .continue-dialog .btn-continue:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 69, 19, 0.3);
+        }
+
+        .continue-dialog .btn-new {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-light);
+        }
+
+        .continue-dialog .btn-new:hover {
+            background: var(--bg-color);
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -12,6 +158,21 @@
         <header class="header">
             <div class="logo">SUHU | 素狐科技</div>
         </header>
+
+        <!-- 存档管理区 -->
+        <section class="save-management">
+            <h3>存档管理</h3>
+            <div class="save-actions">
+                <button class="save-btn" onclick="exportSave()">
+                    <span>导出存档</span>
+                </button>
+                <button class="save-btn upload">
+                    <span>上传存档</span>
+                    <input type="file" accept=".json" onchange="importSave(event)">
+                </button>
+                <span class="save-status" id="saveStatus">无存档</span>
+            </div>
+        </section>
 
         <!-- 剧本选择区 -->
         <main class="game-selection">
@@ -32,12 +193,119 @@
         </main>
     </div>
 
+    <!-- 继续游戏弹窗 -->
+    <div class="continue-dialog-overlay" id="continueDialog" style="display: none;">
+        <div class="continue-dialog">
+            <h3>检测到历史存档</h3>
+            <p>您有未完成的游戏进度，请问要继续还是重新开始？</p>
+            <div class="dialog-buttons">
+                <button class="btn btn-new" onclick="startNewGame()">重新开始</button>
+                <button class="btn btn-continue" onclick="continueGame()">继续游戏</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        function selectGame(gameType) {
-            if (gameType === 'imperial_harem') {
-                window.location.href = '/create_character/imperial_harem';
+        // 检查存档状态
+        function checkSaveStatus() {
+            const saveData = localStorage.getItem('suhu_game_data');
+            const statusEl = document.getElementById('saveStatus');
+            if (saveData) {
+                try {
+                    const data = JSON.parse(saveData);
+                    // 支持新旧两种存档格式
+                    const gameData = data.gameData || data;
+                    const emperorName = gameData.emperor ? gameData.emperor.name : '未知';
+                    const charCount = gameData.characters ? gameData.characters.length : 0;
+                    const historyCount = data.conversationSummary ? data.conversationSummary.length : 0;
+                    statusEl.textContent = `皇帝：${emperorName}，${charCount}位人物，已进行${historyCount}次剧情`;
+                    statusEl.className = 'save-status has-save';
+                } catch (e) {
+                    statusEl.textContent = '存档已损坏';
+                    statusEl.className = 'save-status';
+                }
+            } else {
+                statusEl.textContent = '无存档';
+                statusEl.className = 'save-status';
             }
         }
+
+        // 导出存档
+        function exportSave() {
+            const saveData = localStorage.getItem('suhu_game_data');
+            if (!saveData) {
+                alert('没有可导出的存档');
+                return;
+            }
+
+            const blob = new Blob([saveData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'suhu_save_' + Date.now() + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 导入存档
+        function importSave(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    // 验证存档格式
+                    if (!data.emperor || !data.characters) {
+                        alert('存档格式不正确');
+                        return;
+                    }
+
+                    // 保存到localStorage
+                    localStorage.setItem('suhu_game_data', JSON.stringify(data));
+                    checkSaveStatus();
+                    alert('存档导入成功！');
+                } catch (err) {
+                    alert('存档解析失败：' + err.message);
+                }
+            };
+            reader.readAsText(file);
+            // 重置input以便重复选择同一文件
+            event.target.value = '';
+        }
+
+        // 选择游戏
+        function selectGame(gameType) {
+            if (gameType === 'imperial_harem') {
+                const saveData = localStorage.getItem('suhu_game_data');
+                if (saveData) {
+                    // 有存档，弹出选择对话框
+                    document.getElementById('continueDialog').style.display = 'flex';
+                } else {
+                    // 无存档，直接开始新游戏
+                    window.location.href = '/create_character/imperial_harem';
+                }
+            }
+        }
+
+        // 继续游戏
+        function continueGame() {
+            document.getElementById('continueDialog').style.display = 'none';
+            window.location.href = '/game/imperial_harem';
+        }
+
+        // 重新开始
+        function startNewGame() {
+            document.getElementById('continueDialog').style.display = 'none';
+            // 清除存档
+            localStorage.removeItem('suhu_game_data');
+            // 开始新游戏
+            window.location.href = '/create_character/imperial_harem';
+        }
+
+        // 页面加载时检查存档状态
+        checkSaveStatus();
     </script>
 </body>
 </html>
