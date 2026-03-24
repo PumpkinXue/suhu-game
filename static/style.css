@@ -48,12 +48,13 @@ body {
     margin: 0 auto;
     padding: 20px;
     min-height: 100vh;
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Header & Logo */
 .header {
     padding: 20px 0;
-    margin-bottom: 25px;
+    margin-bottom: 15px;
     border-bottom: 1px solid var(--border-light);
     background: linear-gradient(180deg, var(--bg-card) 0%, transparent 100%);
     display: flex;
@@ -338,47 +339,63 @@ body {
 
 /* 游戏主界面 */
 .game-main {
-    padding: 15px 0;
+    padding: 0 0 10px 0;
 }
 
-/* 标签页 - 古典风格 */
-.tabs {
-    display: flex;
-    gap: 6px;
-    margin-bottom: 25px;
+/* 底部导航栏 - 微信风格 */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     background: var(--bg-card);
-    padding: 8px;
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-card);
-    border: 1px solid var(--border-light);
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    z-index: 100;
+    padding: 0;
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
 }
 
-.tab-btn {
+.nav-item {
     flex: 1;
-    padding: 12px 16px;
-    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px;
     background: transparent;
     border: none;
-    color: var(--text-light);
-    border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: all 0.25s ease;
-    font-weight: 500;
+    transition: all 0.2s ease;
+    color: var(--text-muted);
     font-family: inherit;
-    letter-spacing: 1px;
+    -webkit-tap-highlight-color: transparent;
 }
 
-.tab-btn:hover {
+.nav-item:active {
     background: var(--bg-color);
-    color: var(--text-main);
 }
 
-.tab-btn.active {
-    background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-    color: white;
-    box-shadow: 0 2px 8px rgba(139, 69, 19, 0.25);
+.nav-item.active {
+    color: var(--primary-color);
 }
 
+.nav-item .nav-icon {
+    font-size: 22px;
+    line-height: 1;
+}
+
+.nav-item .nav-label {
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.nav-item.active .nav-label {
+    font-weight: 600;
+}
+
+/* 标签页内容 */
 .tab-content {
     display: none;
     animation: fadeIn 0.3s ease;
@@ -1162,12 +1179,13 @@ body {
     border-radius: 10px;
     padding: 14px;
     position: fixed;
-    z-index: 1001;
+    z-index: 10001;
     left: 50%;
-    bottom: 25px;
+    bottom: 80px;
     transform: translateX(-50%);
     font-size: 14px;
     box-shadow: var(--shadow-hover);
+    max-width: 90vw;
 }
 
 .toast.show {
@@ -1176,13 +1194,13 @@ body {
 }
 
 @keyframes fadein {
-    from {bottom: 0; opacity: 0;}
-    to {bottom: 25px; opacity: 1;}
+    from {bottom: 60px; opacity: 0;}
+    to {bottom: 80px; opacity: 1;}
 }
 
 @keyframes fadeout {
-    from {bottom: 25px; opacity: 1;}
-    to {bottom: 0; opacity: 0;}
+    from {bottom: 80px; opacity: 1;}
+    to {bottom: 60px; opacity: 0;}
 }
 
 /* 错误消息样式 */
@@ -1245,6 +1263,7 @@ body {
 @media (max-width: 768px) {
     .container {
         padding: 12px;
+        padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
     }
 
     .title {
@@ -1266,17 +1285,6 @@ body {
 
     .form-actions {
         flex-direction: column;
-    }
-
-    .tabs {
-        flex-direction: row;
-        gap: 5px;
-        padding: 8px;
-    }
-
-    .tab-btn {
-        padding: 10px 12px;
-        font-size: 13px;
     }
 
     .emperor-card {
@@ -1301,9 +1309,9 @@ body {
     }
 
     .story-display {
-        min-height: 220px;
-        max-height: 300px;
-        padding: 16px;
+        min-height: 180px;
+        max-height: 240px;
+        padding: 14px;
     }
 
     .suggestion-buttons {
@@ -1315,22 +1323,55 @@ body {
         padding: 12px;
     }
 
+    /* 移动端输入区：textarea和按钮都满宽 */
     .input-area {
         flex-direction: column;
+        gap: 8px;
+    }
+
+    .input-area textarea {
+        width: 100%;
+        flex: none;
     }
 
     .btn-send {
         width: 100%;
     }
 
+    /* 移动端模态框：居中且在可视范围内 */
     .modal-content {
-        margin: 15% 15px;
-        padding: 22px;
+        margin: 50% auto;
+        max-width: 90%;
+        width: 360px;
+        padding: 20px;
+        max-height: 80vh;
+        overflow-y: auto;
+        position: relative;
     }
 
     .radio-group {
         flex-direction: row;
         gap: 20px;
+    }
+
+    /* 移动端属性变动区：不超出容器 */
+    .attribute-changes {
+        font-size: 12px;
+        padding: 10px 12px;
+        overflow-x: auto;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* 移动端行动建议区：更好的间距 */
+    .action-suggestions {
+        padding: 16px;
+    }
+
+    /* 移动端底部导航适配 */
+    .bottom-nav {
+        height: 60px;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
     }
 }
 
@@ -1343,13 +1384,12 @@ body {
         grid-template-columns: 1fr;
     }
 
-    .tab-btn {
-        padding: 8px 10px;
-        font-size: 12px;
-    }
-
     .action-suggestions h3 {
         font-size: 14px;
+    }
+
+    .nav-item .nav-label {
+        font-size: 10px;
     }
 }
 

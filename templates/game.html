@@ -19,13 +19,6 @@
 
         <!-- 游戏主界面 -->
         <main class="game-main">
-            <!-- 标签页导航 -->
-            <nav class="tabs">
-                <button class="tab-btn" data-tab="attributes">属性</button>
-                <button class="tab-btn" data-tab="characters">人物</button>
-                <button class="tab-btn active" data-tab="action">行动</button>
-            </nav>
-
             <!-- 属性界面 -->
             <section id="attributes" class="tab-content">
                 <div class="emperor-card">
@@ -95,7 +88,7 @@
                             <p>您可以点击下方的建议行动，或在输入框中描述您的行动</p>
                         </div>
                     </div>
-                    
+
                     <!-- 属性变动显示区 -->
                     <div id="attributeChanges" class="attribute-changes" style="display: none;">
                         <span class="attr-change-label">本次变动：</span>
@@ -133,6 +126,22 @@
                 </div>
             </section>
         </main>
+
+        <!-- 底部导航栏（微信风格） -->
+        <nav class="bottom-nav">
+            <button class="nav-item" data-tab="attributes">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">属性</span>
+            </button>
+            <button class="nav-item" data-tab="characters">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">人物</span>
+            </button>
+            <button class="nav-item active" data-tab="action">
+                <span class="nav-icon">⚔️</span>
+                <span class="nav-label">行动</span>
+            </button>
+        </nav>
     </div>
 
     <!-- 妃子详情模态框 -->
@@ -425,12 +434,12 @@
             }
         }
 
-        // 标签页切换
-        document.querySelectorAll('.tab-btn').forEach(btn => {
+        // 标签页切换（底部导航栏）
+        document.querySelectorAll('.nav-item').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                
+
                 btn.classList.add('active');
                 document.getElementById(btn.dataset.tab).classList.add('active');
             });
@@ -602,6 +611,9 @@
         }
         
         // ——— 空窗期状态管理 ———
+        // pendingOps: 追踪还在进行的异步操作数，全部完成才退出处理模式
+        let pendingOps = 0;
+
         function enterProcessingMode() {
             // 禁用四个建议按钮
             document.querySelectorAll('.suggestion-btn').forEach(btn => {
@@ -613,6 +625,17 @@
             sendBtn.textContent = '打断';
             sendBtn.classList.add('btn-abort');
             sendBtn.onclick = abortAction;
+        }
+
+        // 每启动一个异步操作就调用一次，最后一个完成时自动退出处理模式
+        function incPendingOps() { pendingOps++; }
+
+        function decPendingOps() {
+            pendingOps--;
+            if (pendingOps <= 0) {
+                pendingOps = 0;
+                exitProcessingMode();
+            }
         }
 
         function exitProcessingMode() {
@@ -738,57 +761,69 @@
                     }
                 }
                 
-                // 流结束，清理状态
+                // 流结束，清理动画但保持dots（等待所有操作完成后再隐藏）
                 clearInterval(dotsAnimation);
-                loadingDots.style.display = 'none';
-                exitProcessingMode();
-                
+                // loadingDots 的隐藏推迟到 exitProcessingMode 时统一处理
+
                 if (finalData) {
                     // 检查是否是备用数据
                     if (finalData.fallback) {
                         showRetryButton('使用备用方案');
                     }
-                    
+
                     // 更新对话历史（包含摘要机制）
                     await updateConversationHistory(action, finalData.story);
 
-                    // 应用属性变动（实际更新数据+显示）
+                    // 应用属性变动（实际更新数据+显示，同步操作，无需pending）
                     if (finalData.attribute_changes) {
                         applyAttributeChanges(finalData.attribute_changes);
                         displayAttributeChanges(finalData.attribute_changes);
                     }
 
-                    // 处理新人物（如果剧情中遇到新人物）
+                    // 处理新人物：异步，用pendingOps追踪
                     if (finalData.new_character && finalData.new_character.name) {
-                        await handleNewCharacter(finalData.new_character);
+                        incPendingOps();
+                        handleNewCharacter(finalData.new_character).finally(() => {
+                            decPendingOps();
+                        });
                     }
 
-                    // 刷新行动建议（基于最新剧情历史）
-                    refreshSuggestions();
+                    // 刷新行动建议：异步，用pendingOps追踪
+                    incPendingOps();
+                    refreshSuggestions().finally(() => {
+                        decPendingOps();
+                        // 所有异步操作完成后，隐藏dots并退出处理模式
+                        loadingDots.style.display = 'none';
+                    });
                 } else {
+                    // 没有finalData也要退出
                     showRetryButton('解析失败');
+                    loadingDots.style.display = 'none';
+                    exitProcessingMode();
                 }
             } catch (error) {
                 clearInterval(dotsAnimation);
-                exitProcessingMode();
-                
+                loadingDots.style.display = 'none';
+
                 if (error.name === 'AbortError') {
-                    // 用户主动打断，执行回退
-                    loadingDots.style.display = 'none';
+                    // 用户主动打断，执行回退（pendingOps在performRollback中清零）
                     performRollback(storyMessageDiv);
                 } else {
-                    loadingDots.style.display = 'none';
                     showRetryButton('请求失败');
                     addStoryMessage('请求失败: ' + error.message, 'error');
+                    exitProcessingMode();
                 }
             }
-            
+
             currentAbortController = null;
             isProcessing = false;
         }
 
         // 执行回退（打断后）
         function performRollback(storyMessageDiv) {
+            // 清零pendingOps，防止残留计数导致按钮永远禁用
+            pendingOps = 0;
+
             if (previousGameData) {
                 gameData = previousGameData;
                 conversationHistory = previousConversationHistory;
@@ -817,6 +852,9 @@
                 // 显示打断提示
                 showToast('已打断并回退到行动前的状态');
             }
+
+            // 统一退出处理模式
+            exitProcessingMode();
         }
         
         // 显示重试按钮
@@ -1094,7 +1132,7 @@
             // 创建对话框
             const dialog = document.createElement('div');
             dialog.className = 'confirm-dialog';
-            dialog.style.cssText = 'background:#FFFFFF;border-radius:12px;padding:24px;max-width:360px;width:90%;box-shadow:0 10px 40px rgba(0,0,0,0.2);animation:slideDownModal 0.25s ease;';
+            dialog.style.cssText = 'background:#FFFFFF;border-radius:12px;padding:24px;max-width:360px;width:90%;max-height:85vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,0.2);animation:slideDownModal 0.25s ease;';
 
             dialog.innerHTML = `
                 <h3 style="margin:0 0 16px;font-size:18px;color:#2C2C2C;text-align:center;font-weight:600;">${title}</h3>
