@@ -281,7 +281,7 @@
                 if (item.role === 'user') {
                     msgDiv.innerHTML = `<strong>【玩家】</strong>${item.content}`;
                 } else {
-                    msgDiv.innerHTML = `<strong>【剧情】</strong>${item.content}`;
+                    msgDiv.innerHTML = `<strong>【剧情】</strong>${processDialogueText(item.content)}`;
                 }
                 storyDisplay.appendChild(msgDiv);
             });
@@ -687,7 +687,6 @@
 
             let html = '';
             let currentText = '';
-            let dialogueContent = '';
             let inQuote = false;
 
             for (let i = 0; i < text.length; i++) {
@@ -697,8 +696,8 @@
                     currentText = '';
                     inQuote = true;
                 } else if (isRightQuote(text[i]) && inQuote) {
-                    // 遇到右引号：输出对话内容并包裹紫色样式
-                    html += `\n「<span class="dialogue-text">${escapeHtml(currentText)}</span>」\n`;
+                    // 遇到右引号：输出对话内容并包裹紫色样式，加上换行
+                    html += `<br>「<span class="dialogue-text">${escapeHtml(currentText)}</span>」<br>`;
                     currentText = '';
                     inQuote = false;
                 } else {
@@ -709,7 +708,7 @@
             // 处理最后一段（可能有未闭合的引号内容）
             if (inQuote && currentText) {
                 // 有未闭合的引号，把内容也输出
-                html += `\n「<span class="dialogue-text">${escapeHtml(currentText)}</span>`;
+                html += `<br>「<span class="dialogue-text">${escapeHtml(currentText)}</span>`;
             } else if (currentText) {
                 html += escapeHtml(currentText);
             }
