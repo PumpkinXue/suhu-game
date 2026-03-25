@@ -149,32 +149,75 @@
     <div id="characterModal" class="modal">
         <div class="modal-content">
             <span class="close-btn" onclick="closeModal()">&times;</span>
-            <h2>
-                <span id="modalName">人物姓名</span>
-                <span class="rank-badge-large" id="modalRank">-</span>
-            </h2>
-            <div class="modal-details">
-                <p><strong>类型：</strong><span id="modalType">-</span></p>
-                <p><strong>性别：</strong><span id="modalGender">-</span></p>
-                <p><strong>简介：</strong><span id="modalIntro">-</span></p>
-                <p><strong>性格：</strong><span id="modalPersonality">-</span></p>
-                <p id="motherRow"><strong>生母：</strong><span id="modalMother">-</span></p>
-                <p><strong>心境：</strong><span id="modalMood">-</span></p>
-                <p><strong>想法：</strong><span id="modalThought">-</span></p>
-                <div class="stat-row">
-                    <div class="stat-item">
-                        <span class="stat-label">好感度：</span>
-                        <span id="modalFavorability">0</span>
-                        <div class="stat-bar-full"><div id="modalFavorabilityBar" class="stat-fill"></div></div>
+            <div class="modal-header">
+                <h2>
+                    <span id="modalName">人物姓名</span>
+                    <span class="rank-badge-large" id="modalRank">-</span>
+                </h2>
+            </div>
+            <div class="modal-body">
+                <!-- 基本信息板块 -->
+                <div class="modal-section">
+                    <div class="section-row">
+                        <div class="section-item">
+                            <span class="section-label">类型</span>
+                            <span class="section-value" id="modalType">-</span>
+                        </div>
+                        <div class="section-item">
+                            <span class="section-label">性别</span>
+                            <span class="section-value" id="modalGender">-</span>
+                        </div>
+                    </div>
+                    <div class="section-item full-width">
+                        <span class="section-label">简介</span>
+                        <span class="section-value" id="modalIntro">-</span>
+                    </div>
+                    <div class="section-item full-width">
+                        <span class="section-label">性格</span>
+                        <span class="section-value" id="modalPersonality">-</span>
+                    </div>
+                    <div class="section-item full-width" id="motherRow" style="display:none;">
+                        <span class="section-label">生母</span>
+                        <span class="section-value" id="modalMother">-</span>
                     </div>
                 </div>
-                <div class="stat-row">
-                    <div class="stat-item">
-                        <span class="stat-label">真心度：</span>
-                        <span id="modalSincerity">0</span>
-                        <div class="stat-bar-full"><div id="modalSincerityBar" class="stat-fill"></div></div>
+
+                <!-- 状态信息板块 -->
+                <div class="modal-section">
+                    <div class="section-item full-width">
+                        <span class="section-label">心境</span>
+                        <span class="section-value mood-value" id="modalMood">-</span>
+                    </div>
+                    <div class="section-item full-width">
+                        <span class="section-label">想法</span>
+                        <span class="section-value thought-value" id="modalThought">-</span>
                     </div>
                 </div>
+
+                <!-- 数值板块 -->
+                <div class="modal-section">
+                    <div class="section-item full-width">
+                        <span class="section-label">好感度</span>
+                        <div class="stat-bar-container">
+                            <span id="modalFavorability" class="stat-number">0</span>
+                            <div class="stat-bar-full"><div id="modalFavorabilityBar" class="stat-fill"></div></div>
+                        </div>
+                    </div>
+                    <div class="section-item full-width">
+                        <span class="section-label">真心度</span>
+                        <div class="stat-bar-container">
+                            <span id="modalSincerity" class="stat-number">0</span>
+                            <div class="stat-bar-full"><div id="modalSincerityBar" class="stat-fill"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 删除按钮 -->
+            <div class="modal-footer">
+                <button class="modal-delete-btn" onclick="confirmDeleteCharacter()">
+                    🗑 删除此人
+                </button>
             </div>
         </div>
     </div>
@@ -384,6 +427,7 @@
         // 显示人物详情
         function showCharacterDetail(index) {
             const character = gameData.characters[index];
+            currentCharacterIndex = index;  // 保存当前查看的人物索引
 
             document.getElementById('modalName').textContent = character.name;
             document.getElementById('modalType').textContent = character.type || '-';
@@ -395,7 +439,7 @@
             // 生母字段只对皇嗣显示
             const motherRow = document.getElementById('motherRow');
             if (character.type === '皇嗣') {
-                motherRow.style.display = 'block';
+                motherRow.style.display = 'flex';
                 document.getElementById('modalMother').textContent = character.mother || '无记载';
             } else {
                 motherRow.style.display = 'none';
@@ -420,6 +464,25 @@
             sincereBar.className = 'stat-fill ' + (sincere >= 0 ? 'positive' : 'negative');
 
             document.getElementById('characterModal').style.display = 'block';
+        }
+
+        // 当前查看的人物索引（用于删除）
+        let currentCharacterIndex = -1;
+
+        // 确认删除人物
+        function confirmDeleteCharacter() {
+            if (currentCharacterIndex < 0) return;
+            const character = gameData.characters[currentCharacterIndex];
+            if (!character) return;
+
+            showConfirmDialog(
+                '确认删除',
+                `确定要彻底抹去此人信息吗？<br><br><strong>姓名：</strong>${character.name}<br><strong>身份：</strong>${character.type}<br><br><span style="color: #A52A2A;">警告：此操作会导致剧情发展不连贯！</span>`,
+                () => {
+                    deleteCharacter(currentCharacterIndex);
+                    closeModal();
+                }
+            );
         }
 
         // 关闭模态框

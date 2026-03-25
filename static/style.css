@@ -920,9 +920,11 @@ body {
 .modal-content {
     background: var(--bg-card);
     border-radius: var(--radius-lg);
-    margin: 8% auto;
-    padding: 28px;
+    margin: 5% auto;
     max-width: 450px;
+    width: 90%;
+    max-height: 85vh;
+    overflow-y: auto;
     position: relative;
     animation: slideDownModal 0.3s ease;
     box-shadow: var(--shadow-hover);
@@ -936,44 +938,155 @@ body {
 
 .close-btn {
     position: absolute;
-    right: 18px;
-    top: 12px;
+    right: 12px;
+    top: 8px;
     color: var(--text-muted);
     font-size: 28px;
     font-weight: bold;
     cursor: pointer;
     transition: color 0.3s ease;
     line-height: 1;
+    z-index: 10;
 }
 
 .close-btn:hover {
     color: var(--primary-color);
 }
 
-.modal-content h2 {
-    color: var(--text-main);
-    font-size: 20px;
-    margin-bottom: 22px;
+/* 模态框头部 */
+.modal-header {
+    padding: 20px 20px 0 20px;
     text-align: center;
-    border-bottom: 1px solid var(--border-light);
-    padding-bottom: 14px;
-    font-weight: 600;
-    letter-spacing: 1px;
 }
 
-.modal-details p {
-    margin-bottom: 14px;
-    font-size: 15px;
+.modal-header h2 {
+    color: var(--text-main);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* 位分名牌优化 */
+.rank-badge-large {
+    display: inline-block;
+    padding: 6px 16px;
+    background: linear-gradient(135deg, var(--primary-light), var(--primary-color));
+    border-radius: 20px;
+    font-size: 13px;
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(139, 69, 19, 0.3);
+}
+
+/* 模态框主体 */
+.modal-body {
+    padding: 15px 20px;
+}
+
+/* 板块样式 */
+.modal-section {
+    background: var(--bg-card-alt);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 12px 15px;
+    margin-bottom: 12px;
+}
+
+.modal-section:last-child {
+    margin-bottom: 0;
+}
+
+.section-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.section-row .section-item {
+    flex: 1;
+}
+
+.section-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.section-item:last-child {
+    margin-bottom: 0;
+}
+
+.section-item.full-width {
+    width: 100%;
+}
+
+.section-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.section-value {
+    font-size: 14px;
+    color: var(--text-main);
     line-height: 1.5;
 }
 
-.modal-details strong {
-    color: var(--text-main);
-    font-weight: 600;
+/* 心境和想法的样式 */
+.mood-value {
+    color: #16a085;
 }
 
-.modal-details span {
-    color: var(--text-light);
+.thought-value {
+    color: #8e44ad;
+    font-style: italic;
+}
+
+/* 数值条容器 */
+.stat-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stat-number {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-main);
+    min-width: 35px;
+}
+
+/* 模态框底部 */
+.modal-footer {
+    padding: 15px 20px 20px 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.modal-delete-btn {
+    padding: 10px 24px;
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+    border: none;
+    border-radius: var(--radius-md);
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 2px 8px rgba(231, 76, 60, 0.25);
+}
+
+.modal-delete-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(231, 76, 60, 0.4);
 }
 
 /* 行动界面 */
@@ -1338,15 +1451,65 @@ body {
         width: 100%;
     }
 
-    /* 移动端模态框：居中且在可视范围内 */
+    /* 移动端模态框 */
     .modal-content {
-        margin: 50% auto;
-        max-width: 90%;
-        width: 360px;
-        padding: 20px;
-        max-height: 80vh;
+        margin: 3% auto;
+        max-width: 95%;
+        width: 95%;
+        padding: 0;
+        max-height: 90vh;
         overflow-y: auto;
         position: relative;
+    }
+
+    .modal-header {
+        padding: 15px 15px 10px 15px;
+        position: sticky;
+        top: 0;
+        background: var(--bg-card);
+        z-index: 5;
+        border-bottom: 1px solid var(--border-light);
+    }
+
+    .modal-header h2 {
+        font-size: 18px;
+    }
+
+    .close-btn {
+        right: 10px;
+        top: 5px;
+        font-size: 24px;
+    }
+
+    .modal-body {
+        padding: 12px 15px;
+    }
+
+    .modal-section {
+        padding: 10px 12px;
+        margin-bottom: 10px;
+    }
+
+    .section-label {
+        font-size: 11px;
+    }
+
+    .section-value {
+        font-size: 13px;
+    }
+
+    .modal-footer {
+        padding: 12px 15px 15px 15px;
+        position: sticky;
+        bottom: 0;
+        background: var(--bg-card);
+        border-top: 1px solid var(--border-light);
+    }
+
+    .modal-delete-btn {
+        width: 100%;
+        padding: 12px;
+        font-size: 15px;
     }
 
     .radio-group {
