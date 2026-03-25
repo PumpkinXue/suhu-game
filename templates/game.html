@@ -196,6 +196,7 @@
         let isProcessing = false;
         let currentAbortController = null;  // 用于打断请求
         let waitingTimerInterval = null;    // 空窗期计秒定时器
+        let inDialogue = false;  // 当前是否在引号对话内（用于流式输出着色）
 
         // 页面加载时获取游戏数据（优先从localStorage读取）
         async function loadGameData() {
@@ -668,9 +669,65 @@
             }, 1000);
         }
 
+        // 处理对话文字着色（实时流式版本）
+        // 检测 "" 包裹的对话文字，渲染为紫色斜体
+        function processDialogueText(text) {
+            // 检测是否为中文双引号（左引号或右引号）
+            function isLeftQuote(ch) {
+                const code = ch.charCodeAt(0);
+                // 8220: "  34: ASCII "
+                return code === 8220 || code === 34;
+            }
+
+            function isRightQuote(ch) {
+                const code = ch.charCodeAt(0);
+                // 8221: "  34: ASCII "
+                return code === 8221 || code === 34;
+            }
+
+            let html = '';
+            let currentText = '';
+            let dialogueContent = '';
+            let inQuote = false;
+
+            for (let i = 0; i < text.length; i++) {
+                if (isLeftQuote(text[i])) {
+                    // 遇到左引号：先输出之前的文字，再开始对话
+                    html += escapeHtml(currentText);
+                    currentText = '';
+                    inQuote = true;
+                } else if (isRightQuote(text[i]) && inQuote) {
+                    // 遇到右引号：输出对话内容并包裹紫色样式
+                    html += `\n「<span class="dialogue-text">${escapeHtml(currentText)}</span>」\n`;
+                    currentText = '';
+                    inQuote = false;
+                } else {
+                    currentText += text[i];
+                }
+            }
+
+            // 处理最后一段（可能有未闭合的引号内容）
+            if (inQuote && currentText) {
+                // 有未闭合的引号，把内容也输出
+                html += `\n「<span class="dialogue-text">${escapeHtml(currentText)}</span>`;
+            } else if (currentText) {
+                html += escapeHtml(currentText);
+            }
+
+            return html;
+        }
+
+        // HTML转义函数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         // 执行行动（流式版本）
         async function executeAction(action, style) {
             isProcessing = true;
+            inDialogue = false;  // 重置对话状态
             
             // 保存当前状态用于回退（包括行动建议）
             previousGameData = JSON.parse(JSON.stringify(gameData));
@@ -741,9 +798,9 @@
                                 const data = JSON.parse(line.slice(6));
                                 
                                 if (data.type === 'chunk') {
-                                    // 流式显示剧情文字
+                                    // 流式显示剧情文字（带对话着色）
                                     fullStory += data.content;
-                                    streamingText.textContent = fullStory;
+                                    streamingText.innerHTML = processDialogueText(fullStory);
                                     scrollToBottom();
                                 } else if (data.type === 'done') {
                                     // story阶段结束，进入空窗期计秒
