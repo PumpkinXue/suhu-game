@@ -985,11 +985,15 @@
                                         }
 
                                         // 处理新人物
+                                        console.log('检查新人物:', finalData.new_character);
                                         if (finalData.new_character && finalData.new_character.name) {
+                                            console.log('添加新人物:', finalData.new_character);
                                             incPendingOps();
                                             handleNewCharacter(finalData.new_character).finally(() => {
                                                 decPendingOps();
                                             });
+                                        } else {
+                                            console.log('没有新人物或新人物没有name属性');
                                         }
 
                                         // 刷新行动建议
@@ -1333,6 +1337,9 @@
 
         // 处理新人物（添加并显示通知）
         async function handleNewCharacter(newCharacter) {
+            console.log('handleNewCharacter 被调用, newCharacter:', newCharacter);
+            console.log('gameData.characters 长度:', gameData.characters ? gameData.characters.length : 'undefined');
+
             // 检查人物数量是否已达上限（20人）
             if (gameData.characters && gameData.characters.length >= 20) {
                 console.log('人物数量已达上限（20人），忽略新人物');
@@ -1346,6 +1353,7 @@
 
             // 添加新人物到列表末尾
             gameData.characters.push(newCharacter);
+            console.log('添加后 gameData.characters 长度:', gameData.characters.length);
 
             // 刷新人物显示
             displayCharacters();

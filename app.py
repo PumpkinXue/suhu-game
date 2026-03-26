@@ -179,11 +179,11 @@ def generate_game_content(emperor_name, gender, concubine_count, heir_count, bac
             "name": "人物姓名",
             "type": "妃嫔/皇嗣",
             "gender": "男/女（妃嫔必填女，皇嗣根据实际填写）",
-            "intro": "简介（50字以内，凸显年龄段如孩童/少年/青年/中年等，不要直接说几岁）",
+            "intro": "简介（50字以内，妃子要包括她的身份（如正几品什么什么官员之嫡女/庶女/妹妹，或是特殊身份歌女、奴婢）和她与皇上的相识，皇嗣要包含一个模糊的年龄段，以及性格描述）",
             "personality": "性格描述",
             "mood": "心境",
             "thought": "对目前局势和皇帝的看法（50字以内）",
-            "mother": "生母姓名（仅皇嗣填写，妃嫔填无）",
+            "mother": "生母姓名（仅皇嗣填写，妃嫔填无，也可以有特殊生母的皇嗣，这时就要输出未记载/已故/奴婢）",
             "rank": "品级名称（妃嫔从以下列表选择：{concubine_ranks}；皇嗣男选：{male_heir_ranks}，女选：{female_heir_ranks}）",
             "favorability": 数值(-100到100,初始50左右表示初始有好感),
             "sincerity": 数值(-100到100,初始30左右表示初步信任)
@@ -192,12 +192,12 @@ def generate_game_content(emperor_name, gender, concubine_count, heir_count, bac
 }}
 
 要求：
-1. 皇帝的属性（才华、武力、容貌、道德）根据人物背景合理分配，总和为200-300之间
+1. 皇帝的属性（才华、武力、容貌、道德）根据人物背景合理分配，总和为200-300之间，皇帝的人物背景不能照搬原话，必须要在原话的基础上丰富出一个故事背景。
 2. 妃子数量为{concubine_count}人，type为"妃嫔"，男皇帝则gender填"女"，女皇帝则gender填"男"，每个要有rank(品级)、favorability(好感度)、sincerity(真心度)字段
 3. 皇嗣数量为{heir_count}人，type为"皇嗣"，gender根据实际填写（男/女），每个要有rank(品级)、favorability、sincerity字段
 4. 妃子的rank必须从给定的品级列表中选择，不能自己编造
-5. 皇嗣的rank必须根据性别从对应列表中选择
-6. 好感度和真心度数值要合理，初始值应该是正值表示初始好感
+5. 皇嗣的rank必须根据性别从对应列表中选择，幼年孩童的品级不应该超过正三品
+6. 好感度和真心度数值要合理，初始值可以根据人设合理设置正负大小
 7. 妃子的名字必须是姓+名，不能是高贵妃，高夫人等姓加称呼。
 8. 想法（thought）是对目前局势的看法和对皇帝的看法的综合，50字以内
 9. 所有人物都放在characters数组中，不要单独生成concubines和heirs
@@ -738,6 +738,8 @@ def execute_action():
                     j_start = clean_buf.find('{')
                     j_end = clean_buf.rfind('}') + 1
 
+                    print(f"DEBUG: JSON模式检测 - j_start: {j_start}, j_end: {j_end}, done_sent: {done_sent}")
+
                     if j_start != -1 and j_end > j_start:
                         try:
                             parsed = json.loads(clean_buf[j_start:j_end])
@@ -745,14 +747,17 @@ def execute_action():
                             suggestions = parsed.get('next_suggestions', {})
                             new_character = parsed.get('new_character', {})
 
+                            print(f"DEBUG: JSON解析成功, new_character: {new_character}")
+
                             # 发送完成事件
                             yield f"data: {json.dumps({'type': 'done', 'attribute_changes': attribute_changes, 'suggestions': suggestions, 'new_character': new_character if new_character and new_character.get('name') else {}})}\n\n"
                             done_sent = True
                             return
-                        except json.JSONDecodeError:
-                            pass
+                        except json.JSONDecodeError as e:
+                            print(f"DEBUG: JSON解析失败: {e}")
 
             # 未能完整解析，使用备用数据
+            print(f"DEBUG: 循环结束, done_sent: {done_sent}")
             if not done_sent:
                 fallback = execute_action_fallback_data(action, style, emperor, characters)
                 yield f"data: {json.dumps({'type': 'done', 'attribute_changes': fallback['attribute_changes'], 'suggestions': fallback['suggestions'], 'new_character': {}, 'fallback': True})}\n\n"
