@@ -1,5 +1,10 @@
 import os
 import json
+import uuid
+import time
+import threading
+import queue
+import re
 from flask import Flask, render_template, request, jsonify, session, Response, stream_with_context
 from datetime import timedelta
 import requests
@@ -9,6 +14,11 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "suhu-game-secret-key-2024")
 # 配置session过期时间
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+
+# 任务存储（用于后台执行大模型调用）
+# 结构: { task_id: { "status": "pending"|"running"|"done"|"error", "result": {}, "error": None } }
+tasks = {}
+tasks_lock = threading.Lock()
 
 # DeepSeek API配置（优先使用环境变量）
 API_KEY = os.environ.get("API_KEY", "sk-cfc36fb7d5d94dd48c48dce8fde9eef2")
@@ -20,7 +30,7 @@ def call_deepseek_stream(prompt, system_prompt="You are a helpful assistant."):
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
-    
+
     data = {
         "model": "deepseek-chat",
         "messages": [
@@ -30,9 +40,9 @@ def call_deepseek_stream(prompt, system_prompt="You are a helpful assistant."):
         "temperature": 0.8,
         "stream": True
     }
-    
-    response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data, stream=True, timeout=60)
-    
+
+    response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data, stream=True, timeout=120)
+
     if response.status_code == 200:
         for chunk in response.iter_lines():
             if chunk:
@@ -50,13 +60,14 @@ def call_deepseek_stream(prompt, system_prompt="You are a helpful assistant."):
     else:
         raise Exception(f"API调用失败: {response.text}")
 
+
 def call_deepseek(prompt, system_prompt="You are a helpful assistant."):
-    """调用DeepSeek API"""
+    """调用DeepSeek API（非流式版本）"""
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
-    
+
     data = {
         "model": "deepseek-chat",
         "messages": [
@@ -65,24 +76,81 @@ def call_deepseek(prompt, system_prompt="You are a helpful assistant."):
         ],
         "temperature": 1.2
     }
-    
-    response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data, timeout=60)
-    
+
+    response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data, timeout=120)
+
     if response.status_code == 200:
         result = response.json()
         return result['choices'][0]['message']['content']
     else:
         raise Exception(f"API调用失败: {response.text}")
 
+# ========== 任务队列相关函数 ==========
+
+def create_task():
+    """创建一个新任务，返回task_id"""
+    task_id = str(uuid.uuid4())
+    with tasks_lock:
+        tasks[task_id] = {
+            "status": "pending",
+            "result": None,
+            "error": None
+        }
+    return task_id
+
+def get_task_result(task_id):
+    """获取任务结果（内部使用）"""
+    with tasks_lock:
+        if task_id not in tasks:
+            return None
+        task = tasks[task_id]
+        status = task["status"]
+        if status == "done":
+            result = task["result"]
+            del tasks[task_id]
+            return {"status": "done", "result": result}
+        elif status == "error":
+            error = task.get("error", "未知错误")
+            del tasks[task_id]
+            return {"status": "error", "error": error}
+        else:
+            return {"status": status}
+
+def set_task_done(task_id, result):
+    """设置任务完成"""
+    with tasks_lock:
+        tasks[task_id]["result"] = result
+        tasks[task_id]["status"] = "done"
+
+def set_task_error(task_id, error):
+    """设置任务错误"""
+    with tasks_lock:
+        tasks[task_id]["error"] = error
+        tasks[task_id]["status"] = "error"
+
+def run_task_in_background(task_id, target_func, *args):
+    """在后台线程中运行任务"""
+    def run():
+        try:
+            result = target_func(*args)
+            set_task_done(task_id, result)
+        except Exception as e:
+            print(f"任务执行失败: {e}")
+            set_task_error(task_id, str(e))
+    thread = threading.Thread(target=run)
+    thread.daemon = True
+    thread.start()
+
+# ========== init_game 任务函数 ==========
+
 def generate_game_content(emperor_name, gender, concubine_count, heir_count, background):
     """调用大模型生成游戏初始内容"""
-
     system_prompt = """你是一个专业的游戏世界观设计师，擅长创建沉浸式的角色扮演游戏内容。
 你的输出必须是有效的JSON格式，不要包含任何其他内容。"""
 
     # 妃子品级和皇嗣品级说明
     concubine_ranks = "正一品(皇后)、从一品(皇贵妃)、正二品(贵妃)、从二品(德妃)、正三品(贤妃)、从三品(丽妃)、正四品(妃)、从四品(嫔)、正五品(贵人)、从五品(常在)、正六品(答应)、从六品(秀女)、正七品及以下(奴婢)"
-    male_heir_ranks = "正一品(皇太子)、从一品(亲王)、正二品(郡王)、从二品(贝勒)、正三品(贝子)、从三品(镇国公)"
+    male_heir_ranks = "正一品(皇太子)、从一品(亲王)、正二品(郡王)、从二品(贝勒)、正三品(贝子)、从三品(爱子)"
     female_heir_ranks = "正一品(固伦公主)、从一品(和碩公主)、正二品(郡主)、从二品(县主)、正三品(郡君)、从三品(县君)"
 
     prompt = f"""请为「皇帝后宫模拟器」生成初始游戏数据。
@@ -100,7 +168,7 @@ def generate_game_content(emperor_name, gender, concubine_count, heir_count, bac
     "emperor": {{
         "name": "皇帝姓名",
         "gender": "男/女",
-        "background": "人物背景（30字内）",
+        "background": "人物背景（50字内）",
         "talent": 数值(1-100),
         "martial": 数值(1-100),
         "appearance": 数值(1-100),
@@ -270,7 +338,7 @@ def game(game_type):
 
 @app.route('/api/init_game', methods=['POST'])
 def init_game():
-    """初始化游戏"""
+    """初始化游戏（任务队列版本）"""
     data = request.json
 
     emperor_name = data.get('emperor_name', '默认皇帝')
@@ -279,21 +347,54 @@ def init_game():
     heir_count = min(int(data.get('heir_count', 0)), 3)
     background = data.get('background', '世袭继承皇位')
 
-    try:
-        game_data = generate_game_content(emperor_name, gender, concubine_count, heir_count, background)
-    except Exception as e:
-        print(f"API调用错误: {e}")
-        game_data = generate_fallback_data(emperor_name, gender, concubine_count, heir_count, background)
-    
-    # 保存到session，设置permanent为True
-    session.permanent = True
-    session['game_data'] = game_data
-    session['emperor_name'] = emperor_name
-    
+    # 创建任务
+    task_id = create_task()
+
+    # 在后台线程中执行
+    def run_init():
+        try:
+            game_data = generate_game_content(emperor_name, gender, concubine_count, heir_count, background)
+            return game_data
+        except Exception as e:
+            print(f"API调用错误: {e}")
+            return generate_fallback_data(emperor_name, gender, concubine_count, heir_count, background)
+
+    run_task_in_background(task_id, run_init)
+
+    # 立即返回任务ID
     return jsonify({
-        'success': True,
-        'data': game_data
+        "success": True,
+        "task_id": task_id
     })
+
+@app.route('/api/get_task_result/<task_id>', methods=['GET'])
+def get_task_result(task_id):
+    """获取任务结果（轮询接口）"""
+    result = get_task_result(task_id)
+
+    if result is None:
+        return jsonify({
+            "success": False,
+            "error": "任务不存在"
+        })
+
+    if result["status"] == "done":
+        return jsonify({
+            "success": True,
+            "status": "done",
+            "result": result["result"]
+        })
+    elif result["status"] == "error":
+        return jsonify({
+            "success": False,
+            "status": "error",
+            "error": result["error"]
+        })
+    else:
+        return jsonify({
+            "success": True,
+            "status": result["status"]
+        })
 
 @app.route('/api/get_game_data')
 def get_game_data():
@@ -370,38 +471,18 @@ STORY_SYSTEM_PROMPT = """你是一个专业的皇帝后宫模拟游戏的主持�
 7. **新人物(new_character)生成规则：**
    - 只有在剧情中自然遇到新人物时才填写，否则new_character保持为空对象{{}}
    - 新人物身份不能是已册封的妃子（妃子必须通过选秀或册封剧情出现）
-   - 身份可以是：选秀入宫的女子、民间偶遇的人物、朝中大臣、宫女/太监、皇嗣、亲属等
+   - 身份可以是：选秀入宫的女子、民间偶遇的人物、朝中大臣、宫女/太监、皇嗣、亲属等，一旦出现与剧情相关的现在没有的人物，你就要考虑是否应该加进来，不论男女老少。
    - 当前人物数量已达20人时，禁止生成新人物
    - 若有新人物，new_character格式为：{{"name":"姓名","type":"类型","gender":"男/女","intro":"简介","personality":"性格","mood":"心境","thought":"想法","rank":"品级或无","favorability":数值,"sincerity":数值}}
 8. 第一段和第二段之间不要有任何额外的标题、说明或分隔符"""
 
-def call_deepseek_with_history(messages, system_prompt):
-    """调用DeepSeek API（带历史记录）"""
-    headers = {
-        "Authorization": f"Bearer {API_KEY}",
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "model": "deepseek-chat",
-        "messages": messages + [{"role": "system", "content": system_prompt}],
-        "temperature": 0.8
-    }
-    
-    response = requests.post(f"{BASE_URL}/chat/completions", headers=headers, json=data, timeout=60)
-    
-    if response.status_code == 200:
-        result = response.json()
-        return result['choices'][0]['message']['content']
-    else:
-        raise Exception(f"API调用失败: {response.text}")
 
 @app.route('/api/get_suggestions', methods=['POST'])
 def get_suggestions():
-    """获取行动建议（基于剧情历史）"""
+    """获取行动建议（基于剧情历史，任务队列版本）"""
     data = request.json
     game_data = data.get('game_data', {})
-    history = data.get('history', [])  # 获取历史记录
+    history = data.get('history', [])
 
     emperor = game_data.get('emperor', {})
     characters = game_data.get('characters', [])
@@ -458,45 +539,58 @@ def get_suggestions():
 {history_context}
 
 请根据以上信息，基于剧情发展历史生成4个不同角度的行动建议。"""
-    
-    try:
-        result = call_deepseek(prompt, system_prompt)
-        
-        # 解析JSON
+
+    # 创建任务
+    task_id = create_task()
+
+    def run_suggestions():
         try:
-            start = result.find('{')
-            end = result.rfind('}') + 1
-            if start != -1 and end != 0:
-                suggestions = json.loads(result[start:end])
-                return jsonify({'success': True, 'suggestions': suggestions})
-        except:
-            pass
-        
-        # 解析失败返回默认建议
-        return jsonify({
-            'success': True,
-            'suggestions': {
-                'gentle': '召见妃子品茶谈心',
-                'aggressive': '选秀扩充后宫',
-                'calm': '在御花园散步思考',
-                'random': '微服出宫巡视'
+            result = call_deepseek(prompt, system_prompt)
+
+            # 解析JSON
+            try:
+                start = result.find('{')
+                end = result.rfind('}') + 1
+                if start != -1 and end != 0:
+                    suggestions = json.loads(result[start:end])
+                    return {"success": True, "suggestions": suggestions}
+            except:
+                pass
+
+            # 解析失败返回默认建议
+            return {
+                "success": True,
+                "suggestions": {
+                    'gentle': '召见妃子品茶谈心',
+                    'aggressive': '选秀扩充后宫',
+                    'calm': '在御花园散步思考',
+                    'random': '微服出宫巡视'
+                }
             }
-        })
-    except Exception as e:
-        print(f"获取建议失败: {e}")
-        return jsonify({
-            'success': True,
-            'suggestions': {
-                'gentle': '召见妃子品茶谈心',
-                'aggressive': '选秀扩充后宫',
-                'calm': '在御花园散步思考',
-                'random': '微服出宫巡视'
+        except Exception as e:
+            print(f"获取建议失败: {e}")
+            return {
+                "success": True,
+                "suggestions": {
+                    'gentle': '召见妃子品茶谈心',
+                    'aggressive': '选秀扩充后宫',
+                    'calm': '在御花园散步思考',
+                    'random': '微服出宫巡视'
+                }
             }
-        })
+
+    run_task_in_background(task_id, run_suggestions)
+
+    # 立即返回任务ID
+    return jsonify({
+        "success": True,
+        "task_id": task_id
+    })
+
 
 @app.route('/api/generate_summary', methods=['POST'])
 def generate_summary():
-    """生成对话摘要"""
+    """生成对话摘要（任务队列版本）"""
     data = request.json
     action = data.get('action', '')
     story = data.get('story', '')
@@ -520,39 +614,50 @@ def generate_summary():
 
 请按格式生成摘要："""
 
-    try:
-        result = call_deepseek(prompt, system_prompt)
-        # 清理可能的markdown格式
-        result = result.strip()
-        if result.startswith('```'):
-            result = result.split('\n', 1)[1]
-        if result.endswith('```'):
-            result = result.rsplit('```', 1)[0]
-        result = result.strip()
+    # 创建任务
+    task_id = create_task()
 
-        # 保护性截取
-        return jsonify({
-            'success': True,
-            'summary': result[:30]  # 最多30字
-        })
-    except Exception as e:
-        print(f"生成摘要失败: {e}")
-        # 失败时返回空摘要
-        return jsonify({
-            'success': True,
-            'summary': ''
-        })
+    def run_summary():
+        try:
+            result = call_deepseek(prompt, system_prompt)
+            # 清理可能的markdown格式
+            result = result.strip()
+            if result.startswith('```'):
+                result = result.split('\n', 1)[1]
+            if result.endswith('```'):
+                result = result.rsplit('```', 1)[0]
+            result = result.strip()
+
+            return {
+                'success': True,
+                'summary': result[:30]
+            }
+        except Exception as e:
+            print(f"生成摘要失败: {e}")
+            return {
+                'success': True,
+                'summary': ''
+            }
+
+    run_task_in_background(task_id, run_summary)
+
+    # 立即返回任务ID
+    return jsonify({
+        "success": True,
+        "task_id": task_id
+    })
+
 
 @app.route('/api/execute_action', methods=['POST'])
 def execute_action():
-    """执行玩家行动（流式版本）"""
+    """执行玩家行动（SSE流式版本）"""
     data = request.json
-    
+
     action = data.get('action', '')
     style = data.get('style', 'custom')
     game_data = data.get('game_data', {})
     history = data.get('history', [])
-    
+
     emperor = game_data.get('emperor', {})
     characters = game_data.get('characters', [])
 
@@ -560,16 +665,12 @@ def execute_action():
     emperor_info = f"姓名：{emperor.get('name', '未知')}，性别：{emperor.get('gender', '未知')}，才华：{emperor.get('talent', 0)}，武力：{emperor.get('martial', 0)}，容貌：{emperor.get('appearance', 0)}，道德：{emperor.get('morality', 0)}"
     characters_info = ", ".join([f"{c.get('name', '')}(类型：{c.get('type', '')}，性别：{c.get('gender', '')}，品级：{c.get('rank', '')}，性格：{c.get('personality', '')}，心境：{c.get('mood', '')}，想法：{c.get('thought', '')}，好感度：{c.get('favorability', 0)}，真心度：{c.get('sincerity', 0)})" for c in characters])
 
-    # 构建历史对话（记忆功能）- 精简为：1个原始对话 + 22个摘要
+    # 构建历史对话（记忆功能）
     history_context = ""
     if history:
-        # 分离原始对话(user/assistant)和摘要(summary)
         original_dialogues = [h for h in history if h.get('role') in ['user', 'assistant']]
         summaries = [h for h in history if h.get('role') == 'summary']
-
-        # 只取最近1个原始对话（用户行动 + 剧情结果 = 2条）
         recent_original = original_dialogues[-2:] if len(original_dialogues) >= 2 else original_dialogues
-        # 只取最近22个摘要
         recent_summaries = summaries[-22:] if len(summaries) > 22 else summaries
 
         history_parts = []
@@ -582,106 +683,94 @@ def execute_action():
         if history_parts:
             history_context = "\n\n剧情发展历史：\n" + "\n".join(history_parts)
 
-    # 构建系统提示词
     system_prompt = STORY_SYSTEM_PROMPT.format(
         emperor_info=emperor_info,
         characters_info=characters_info
     )
-    
-    # 构建用户消息
+
     user_message = f"""玩家行动：{action}
 行动风格：{style}
 {history_context}
 
 请根据以上信息，生成剧情发展和属性变化。"""
-    
-    def generate_response():
-        import re
-        received_content = ""
+
+    def generate():
+        """SSE流式生成器"""
         story = ""
         story_sent_len = 0
         in_json_mode = False
         attribute_changes = {}
         suggestions = {}
         done_sent = False
+        new_character = {}
+        received_content = ""
 
         try:
             for chunk in call_deepseek_stream(user_message, system_prompt):
                 received_content += chunk
 
                 if not in_json_mode:
-                    # 移除markdown代码块标记后查找JSON起始
                     clean_content = re.sub(r'```json\s*', '', received_content)
                     clean_content = re.sub(r'```\s*$', '', clean_content)
-
                     json_start = clean_content.find('{')
 
                     if json_start == -1:
-                        # 还没到JSON，把新增内容作为story流式发出
                         if len(clean_content) > story_sent_len:
                             new_text = clean_content[story_sent_len:]
-                            for char in new_text:
-                                yield f"data: {json.dumps({'type': 'chunk', 'content': char}, ensure_ascii=False)}\n\n"
-                            story_sent_len = len(clean_content)
                             story = clean_content
+                            story_sent_len = len(clean_content)
+                            # 发送故事片段
+                            yield f"data: {json.dumps({'type': 'story', 'content': new_text})}\n\n"
                     else:
-                        # 找到了JSON起始，先把JSON前的story文本补发完
                         story_part = clean_content[:json_start]
                         if len(story_part) > story_sent_len:
                             new_text = story_part[story_sent_len:]
-                            for char in new_text:
-                                yield f"data: {json.dumps({'type': 'chunk', 'content': char}, ensure_ascii=False)}\n\n"
+                            story = story_part.strip()
                             story_sent_len = len(story_part)
-                        story = story_part.strip()
+                            # 发送故事片段
+                            if new_text.strip():
+                                yield f"data: {json.dumps({'type': 'story', 'content': new_text})}\n\n"
                         in_json_mode = True
 
                 if in_json_mode and not done_sent:
-                    # 在原始内容中找完整JSON
                     clean_buf = re.sub(r'```json\s*', '', received_content)
                     clean_buf = re.sub(r'```\s*', '', clean_buf)
                     j_start = clean_buf.find('{')
                     j_end = clean_buf.rfind('}') + 1
+
                     if j_start != -1 and j_end > j_start:
                         try:
                             parsed = json.loads(clean_buf[j_start:j_end])
                             attribute_changes = parsed.get('attribute_changes', {})
                             suggestions = parsed.get('next_suggestions', {})
                             new_character = parsed.get('new_character', {})
-                            has_new_character = bool(new_character and new_character.get('name'))
 
-                            if attribute_changes or suggestions:
-                                done_data = {
-                                    "type": "done",
-                                    "story": story,
-                                    "attribute_changes": attribute_changes,
-                                    "suggestions": suggestions
-                                }
-                                if has_new_character:
-                                    done_data["new_character"] = new_character
-                                yield f"data: {json.dumps(done_data, ensure_ascii=False)}\n\n"
-                                done_sent = True
-                                return
+                            # 发送完成事件
+                            yield f"data: {json.dumps({'type': 'done', 'attribute_changes': attribute_changes, 'suggestions': suggestions, 'new_character': new_character if new_character and new_character.get('name') else {}})}\n\n"
+                            done_sent = True
+                            return
                         except json.JSONDecodeError:
-                            pass  # JSON还不完整，继续接收
+                            pass
 
-            # 循环结束仍未发done，走备用
+            # 未能完整解析，使用备用数据
             if not done_sent:
                 fallback = execute_action_fallback_data(action, style, emperor, characters)
-                if not story:
-                    for char in fallback['story']:
-                        yield f"data: {json.dumps({'type': 'chunk', 'content': char}, ensure_ascii=False)}\n\n"
-                    story = fallback['story']
-                yield f"data: {json.dumps({'type': 'done', 'story': story or fallback['story'], 'attribute_changes': fallback['attribute_changes'], 'suggestions': fallback['suggestions'], 'fallback': True}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'attribute_changes': fallback['attribute_changes'], 'suggestions': fallback['suggestions'], 'new_character': {}, 'fallback': True})}\n\n"
 
         except Exception as e:
-            print(f"API调用失败: {e}")
+            print(f"SSE生成错误: {e}")
             fallback = execute_action_fallback_data(action, style, emperor, characters)
-            for char in fallback['story']:
-                yield f"data: {json.dumps({'type': 'chunk', 'content': char}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'story': fallback['story'], 'attribute_changes': fallback['attribute_changes'], 'suggestions': fallback['suggestions'], 'fallback': True}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'attribute_changes': fallback['attribute_changes'], 'suggestions': fallback['suggestions'], 'new_character': {}, 'fallback': True})}\n\n"
 
-    
-    return Response(generate_response(), mimetype='text/event-stream')
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
 
 def execute_action_fallback_data(action, style, emperor, characters=None):
     """执行行动的备用数据（当API调用失败时）"""
@@ -752,48 +841,6 @@ def execute_action_fallback_data(action, style, emperor, characters=None):
         'suggestions': suggestions
     }
 
-def execute_action_fallback(action, style, emperor, concubines):
-    """执行行动的备用方案（当API调用失败时）"""
-    import random
-    
-    # 根据风格生成不同剧情
-    story_templates = {
-        '温柔': f"皇帝{action}，展现出了温柔体贴的一面。妃子们感受到圣恩，心生欢喜。",
-        '激进': f"皇帝{action}，行事果断雷厉风行。后宫众人不敢有违，秩序井然。",
-        '沉稳': f"皇帝{action}，举止沉稳从容。众人都在猜测圣意，不敢轻举妄动。",
-        '随机': f"皇帝{action}，这一举动出乎众人意料。后宫一时间议论纷纷...",
-        'custom': f"皇帝{action}，后宫之中悄然发生了变化..."
-    }
-    
-    story = story_templates.get(style, story_templates['custom'])
-    
-    # 生成属性变化
-    attribute_changes = {
-        'emperor': {
-            'talent': random.randint(-2, 2),
-            'martial': random.randint(-2, 2),
-            'appearance': random.randint(-2, 2),
-            'morality': random.randint(-2, 2)
-        },
-        'concubines': []
-    }
-    
-    # 更新一个妃子的心境
-    if concubines:
-        random_concubine = random.choice(concubines)
-        moods = ["欣喜", "担忧", "感动", "期待", "忐忑", "安心"]
-        attribute_changes['concubines'].append({
-            'name': random_concubine.get('name', ''),
-            'mood': random.choice(moods)
-        })
-    
-    # 建议
-    suggestions = {
-        'gentle': '召见妃子品茶谈心',
-        'aggressive': '选秀扩充后宫',
-        'calm': '在御花园散步思考',
-        'random': '微服出宫巡视'
-    }
-    
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

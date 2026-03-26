@@ -19,3 +19,18 @@
 - 每次executeAction开始时重置 `inDialogue = false`
 - 显示效果：对话内容为紫色斜体，引号保留显示，对话前后换行
 - 注意：不处理单引号 `''` 和书名号 `《》`
+
+## Render超时修复（2026-03-26）
+- 问题：Render免费版30秒超时导致大模型调用被切断
+- 解决方案：任务队列 + 前端轮询
+- 后端实现：
+  - 新增 `tasks` 字典存储任务状态（pending/running/done/error）
+  - 新增 `run_execute_action_task()` 后台线程函数执行大模型调用
+  - 修改 `/api/execute_action` 立即返回任务ID，不等待大模型
+  - 新增 `/api/get_task_result/<task_id>` 轮询接口获取结果
+  - API timeout 从60秒改为120秒
+- 前端实现：
+  - `executeAction()` 改为先获取任务ID，再轮询结果
+  - 新增 `pollTaskResult()` 轮询函数，每秒查询一次
+  - 最长等待10分钟
+- 效果：后端请求1秒内返回，避开30秒限制；大模型可运行任意时长

@@ -67,9 +67,40 @@
     </div>
 
     <script>
+        // 轮询获取任务结果
+        async function pollTaskResult(taskId, maxWaitTime = 600000) {
+            const POLL_INTERVAL = 1000;
+            let waitTime = 0;
+
+            while (waitTime < maxWaitTime) {
+                try {
+                    const response = await fetch(`/api/get_task_result/${taskId}`);
+                    if (!response.ok) {
+                        throw new Error('获取结果失败');
+                    }
+
+                    const result = await response.json();
+
+                    if (result.status === 'done') {
+                        return result.result;
+                    } else if (result.status === 'error') {
+                        throw new Error(result.error || '任务执行出错');
+                    }
+
+                    waitTime += POLL_INTERVAL;
+                } catch (error) {
+                    throw error;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+            }
+
+            throw new Error('等待超时');
+        }
+
         document.getElementById('characterForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            
+
             const emperorName = document.getElementById('emperorName').value;
             const gender = document.querySelector('input[name="gender"]:checked').value;
             const concubineCount = document.getElementById('concubineCount').value;
@@ -87,11 +118,11 @@
                 alert('皇嗣数量必须在0-3之间');
                 return;
             }
-            
+
             // 显示加载
             document.getElementById('characterForm').style.display = 'none';
             document.getElementById('loading').style.display = 'block';
-            
+
             try {
                 const response = await fetch('/api/init_game', {
                     method: 'POST',
@@ -106,17 +137,23 @@
                         background: background
                     })
                 });
-                
+
                 const result = await response.json();
-                
-                if (result.success) {
-                    // 保存到localStorage
-                    if (result.data) {
-                        localStorage.setItem('suhu_game_data', JSON.stringify(result.data));
+
+                if (result.success && result.task_id) {
+                    // 轮询获取结果
+                    try {
+                        const gameData = await pollTaskResult(result.task_id);
+                        // 保存到localStorage
+                        localStorage.setItem('suhu_game_data', JSON.stringify(gameData));
+                        window.location.href = '/game/{{ game_type }}';
+                    } catch (pollError) {
+                        alert('游戏初始化失败: ' + pollError.message);
+                        document.getElementById('characterForm').style.display = 'block';
+                        document.getElementById('loading').style.display = 'none';
                     }
-                    window.location.href = '/game/{{ game_type }}';
                 } else {
-                    alert('游戏初始化失败: ' + result.error);
+                    alert('游戏初始化失败: ' + (result.error || '未知错误'));
                     document.getElementById('characterForm').style.display = 'block';
                     document.getElementById('loading').style.display = 'none';
                 }

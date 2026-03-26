@@ -237,9 +237,8 @@
         let conversationSummary = [];  // 更早的对话摘要（15字以内，最多20条）
         let currentSuggestions = { gentle: '-', aggressive: '-', calm: '-', random: '-' };  // 当前行动建议
         let isProcessing = false;
-        let currentAbortController = null;  // 用于打断请求
+        let currentEventSource = null;  // 用于打断SSE连接
         let waitingTimerInterval = null;    // 空窗期计秒定时器
-        let inDialogue = false;  // 当前是否在引号对话内（用于流式输出着色）
 
         // 页面加载时获取游戏数据（优先从localStorage读取）
         async function loadGameData() {
@@ -255,7 +254,7 @@
                 if (hasSavedSuggestions()) {
                     restoreSuggestions();
                 } else {
-                    loadInitialSuggestions();
+                    await loadInitialSuggestions();
                 }
                 document.getElementById('loading').style.display = 'none';
                 return;
@@ -278,7 +277,7 @@
                     // 保存到localStorage
                     localStorage.setItem('suhu_game_data', JSON.stringify(gameData));
                     displayGameData();
-                    loadInitialSuggestions();
+                    await loadInitialSuggestions();
                     document.getElementById('loading').style.display = 'none';
                 } else {
                     console.error('加载失败:', result.error);
@@ -360,7 +359,7 @@
             document.getElementById('valueMartial').textContent = emperor.martial;
             document.getElementById('valueAppearance').textContent = emperor.appearance;
             document.getElementById('valueMorality').textContent = emperor.morality;
-            
+
             document.getElementById('attrTalent').style.width = emperor.talent + '%';
             document.getElementById('attrMartial').style.width = emperor.martial + '%';
             document.getElementById('attrAppearance').style.width = emperor.appearance + '%';
@@ -509,7 +508,43 @@
             });
         });
 
-        // 加载初始行动建议（传递历史上下文）
+        // 轮询获取任务结果
+        async function pollTaskResult(taskId, onSuccess, onError) {
+            const POLL_INTERVAL = 1000;
+            const MAX_WAIT_TIME = 600000; // 10分钟
+
+            let waitTime = 0;
+
+            while (waitTime < MAX_WAIT_TIME) {
+                try {
+                    const response = await fetch(`/api/get_task_result/${taskId}`);
+                    if (!response.ok) {
+                        throw new Error('获取结果失败');
+                    }
+
+                    const result = await response.json();
+
+                    if (result.status === 'done') {
+                        onSuccess(result.result);
+                        return;
+                    } else if (result.status === 'error') {
+                        throw new Error(result.error || '任务执行出错');
+                    }
+
+                    waitTime += POLL_INTERVAL;
+
+                } catch (error) {
+                    onError(error.message);
+                    return;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+            }
+
+            onError('等待超时');
+        }
+
+        // 加载初始行动建议（使用任务队列）
         async function loadInitialSuggestions() {
             try {
                 const response = await fetch('/api/get_suggestions', {
@@ -521,8 +556,18 @@
                     })
                 });
                 const result = await response.json();
-                if (result.success) {
-                    updateSuggestions(result.suggestions);
+                if (result.success && result.task_id) {
+                    // 轮询获取结果
+                    pollTaskResult(result.task_id,
+                        (data) => {
+                            if (data.suggestions) {
+                                updateSuggestions(data.suggestions);
+                            }
+                        },
+                        (error) => {
+                            console.error('加载建议失败:', error);
+                        }
+                    );
                 }
             } catch (error) {
                 console.error('加载建议失败:', error);
@@ -557,8 +602,18 @@
                     })
                 });
                 const result = await response.json();
-                if (result.success) {
-                    updateSuggestions(result.suggestions);
+                if (result.success && result.task_id) {
+                    // 轮询获取结果
+                    pollTaskResult(result.task_id,
+                        (data) => {
+                            if (data.suggestions) {
+                                updateSuggestions(data.suggestions);
+                            }
+                        },
+                        (error) => {
+                            console.error('刷新建议失败:', error);
+                        }
+                    );
                 }
             } catch (error) {
                 console.error('刷新建议失败:', error);
@@ -568,14 +623,14 @@
         // 执行行动
         async function takeAction(style) {
             if (isProcessing) return;
-            
+
             const suggestionMap = {
                 '温柔': document.getElementById('suggestion1').textContent,
                 '激进': document.getElementById('suggestion2').textContent,
                 '沉稳': document.getElementById('suggestion3').textContent,
                 '随机': document.getElementById('suggestion4').textContent
             };
-            
+
             const action = suggestionMap[style];
             if (action && action !== '-') {
                 await executeAction(action, style);
@@ -585,20 +640,31 @@
         // 提交行动
         async function submitAction() {
             if (isProcessing) return;
-            
+
             const input = document.getElementById('actionInput');
             const action = input.value.trim();
-            
+
             if (!action) return;
-            
+
             await executeAction(action, 'custom');
             input.value = '';
         }
 
         // 打断当前请求
         function abortAction() {
-            if (currentAbortController) {
-                currentAbortController.abort();
+            if (currentEventSource) {
+                if (currentEventSource.abort) {
+                    currentEventSource.abort();
+                } else if (currentEventSource.close) {
+                    currentEventSource.close();
+                }
+                currentEventSource = null;
+            }
+            // 执行回退
+            const messages = document.querySelectorAll('.story-message');
+            if (messages.length >= 2) {
+                const lastMsg = messages[messages.length - 1];
+                performRollback(lastMsg);
             }
         }
 
@@ -607,7 +673,7 @@
         let previousConversationHistory = [];
         let previousConversationSummary = [];
         let previousSuggestions = {};
-        
+
         // 获取当前行动建议
         function getCurrentSuggestions() {
             return {
@@ -632,7 +698,7 @@
             return result;
         }
 
-        // 更新对话历史（包含摘要机制）- 异步调用LLM生成摘要
+        // 更新对话历史（包含摘要机制）
         async function updateConversationHistory(action, story) {
             // 添加原始对话
             conversationHistory.push({ role: 'user', content: action });
@@ -654,14 +720,23 @@
                         })
                     });
                     const result = await response.json();
-                    const summary = result.success ? result.summary : '';
-
-                    if (summary) {
-                        conversationSummary.push({
-                            role: 'summary',
-                            summary: summary,
-                            timestamp: Date.now()
+                    if (result.success && result.task_id) {
+                        // 轮询获取结果
+                        const summaryResult = await new Promise((resolve, reject) => {
+                            pollTaskResult(result.task_id,
+                                (data) => resolve(data),
+                                (error) => resolve({ summary: '' })
+                            );
                         });
+                        const summary = summaryResult.success ? summaryResult.summary : '';
+
+                        if (summary) {
+                            conversationSummary.push({
+                                role: 'summary',
+                                summary: summary,
+                                timestamp: Date.now()
+                            });
+                        }
                     }
                 } catch (e) {
                     console.error('生成摘要失败:', e);
@@ -673,7 +748,7 @@
                 conversationSummary = conversationSummary.slice(-20);
             }
         }
-        
+
         // ——— 空窗期状态管理 ———
         // pendingOps: 追踪还在进行的异步操作数，全部完成才退出处理模式
         let pendingOps = 0;
@@ -732,8 +807,7 @@
             }, 1000);
         }
 
-        // 处理对话文字着色（实时流式版本）
-        // 检测 "" 包裹的对话文字，渲染为紫色斜体
+        // 处理对话文字着色（用于历史记录显示）
         function processDialogueText(text) {
             // 检测是否为中文双引号（左引号或右引号）
             function isLeftQuote(ch) {
@@ -786,51 +860,50 @@
             return div.innerHTML;
         }
 
-        // 执行行动（流式版本）
+        // 执行行动（SSE流式版本）
         async function executeAction(action, style) {
             isProcessing = true;
-            inDialogue = false;  // 重置对话状态
-            
+
             // 保存当前状态用于回退（包括行动建议）
             previousGameData = JSON.parse(JSON.stringify(gameData));
             previousConversationHistory = JSON.parse(JSON.stringify(conversationHistory));
             previousConversationSummary = JSON.parse(JSON.stringify(conversationSummary));
             previousSuggestions = getCurrentSuggestions();
-            
+
             // 隐藏之前的属性变动和错误按钮
             document.getElementById('attributeChanges').style.display = 'none';
             hideRetryButton();
 
             // 进入处理模式（禁用建议按钮，显示打断按钮）
             enterProcessingMode();
-            
+
             // 显示用户行动
             addStoryMessage(action, 'user');
-            
-            // 创建一个用于流式显示的消息元素
+
+            // 创建一个用于显示的消息元素
             const storyMessageDiv = document.createElement('div');
             storyMessageDiv.className = 'story-message story-assistant';
             storyMessageDiv.innerHTML = '<strong>【剧情】</strong><span class="streaming-text"></span><span class="loading-dots"></span>';
             document.getElementById('storyDisplay').appendChild(storyMessageDiv);
-            
+
             const streamingText = storyMessageDiv.querySelector('.streaming-text');
             const loadingDots = storyMessageDiv.querySelector('.loading-dots');
             scrollToBottom();
-            
+
             // 启动等待动画
             let dotsCount = 0;
             const dotsAnimation = setInterval(() => {
                 dotsCount = (dotsCount + 1) % 4;
                 loadingDots.textContent = '.'.repeat(dotsCount);
             }, 300);
-            
+
             let fullStory = '';
             let finalData = null;
+            let isDone = false;
+            let reader = null;
 
-            // 创建AbortController用于打断
-            currentAbortController = new AbortController();
-            
             try {
+                // 使用fetch + ReadableStream进行流式读取
                 const response = await fetch('/api/execute_action', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -839,107 +912,190 @@
                         style: style,
                         game_data: gameData,
                         history: getHistoryForAPI()
-                    }),
-                    signal: currentAbortController.signal
+                    })
                 });
-                
-                const reader = response.body.getReader();
+
+                if (!response.ok) {
+                    throw new Error('请求失败: ' + response.status);
+                }
+
+                // 获取流式读取器
+                reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                let storyPhaseEnded = false;  // story流式阶段是否结束
-                
+                let buffer = '';
+
+                // 创建一个abort控制器用于打断
+                const abortController = new AbortController();
+                currentEventSource = { abort: () => abortController.abort() };
+
+                // 读取流
                 while (true) {
                     const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-                    
+
+                    if (done) {
+                        break;
+                    }
+
+                    // 解码数据
+                    buffer += decoder.decode(value, { stream: true });
+
+                    // 处理缓冲区中的完整事件
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || ''; // 保留不完整的行
+
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             try {
                                 const data = JSON.parse(line.slice(6));
-                                
-                                if (data.type === 'chunk') {
-                                    // 流式显示剧情文字（带对话着色）
+
+                                if (data.type === 'story') {
+                                    // 收到故事片段，追加显示
                                     fullStory += data.content;
                                     streamingText.innerHTML = processDialogueText(fullStory);
                                     scrollToBottom();
                                 } else if (data.type === 'done') {
-                                    // story阶段结束，进入空窗期计秒
-                                    if (!storyPhaseEnded) {
-                                        storyPhaseEnded = true;
-                                        clearInterval(dotsAnimation);
-                                        enterWaitingMode(loadingDots);
+                                    // 收到完成事件
+                                    isDone = true;
+                                    clearInterval(dotsAnimation);
+                                    enterWaitingMode(loadingDots);
+
+                                    finalData = {
+                                        story: fullStory,
+                                        attribute_changes: data.attribute_changes,
+                                        suggestions: data.suggestions,
+                                        new_character: data.new_character,
+                                        fallback: data.fallback || false
+                                    };
+
+                                    // 显示最终格式化后的剧情
+                                    streamingText.innerHTML = processDialogueText(fullStory);
+                                    scrollToBottom();
+
+                                    // 检查是否是备用数据
+                                    if (finalData.fallback) {
+                                        showRetryButton('使用备用方案');
                                     }
-                                    finalData = data;
+
+                                    // 更新对话历史（包含摘要机制）
+                                    updateConversationHistory(action, finalData.story).then(() => {
+                                        // 应用属性变动
+                                        if (finalData.attribute_changes) {
+                                            applyAttributeChanges(finalData.attribute_changes);
+                                            displayAttributeChanges(finalData.attribute_changes);
+                                        }
+
+                                        // 处理新人物
+                                        if (finalData.new_character && finalData.new_character.name) {
+                                            incPendingOps();
+                                            handleNewCharacter(finalData.new_character).finally(() => {
+                                                decPendingOps();
+                                            });
+                                        }
+
+                                        // 刷新行动建议
+                                        incPendingOps();
+                                        refreshSuggestions().finally(() => {
+                                            decPendingOps();
+                                            loadingDots.style.display = 'none';
+                                        });
+                                    });
+
+                                    currentEventSource = null;
+                                    isProcessing = false;
                                 }
                             } catch (e) {
-                                console.log('解析SSE数据失败:', e);
+                                console.error('解析SSE数据失败:', e);
                             }
                         }
                     }
                 }
-                
-                // 流结束，清理动画但保持dots（等待所有操作完成后再隐藏）
-                clearInterval(dotsAnimation);
-                // loadingDots 的隐藏推迟到 exitProcessingMode 时统一处理
 
-                if (finalData) {
-                    // 检查是否是备用数据
-                    if (finalData.fallback) {
-                        showRetryButton('使用备用方案');
+                // 处理缓冲区中剩余的数据
+                if (buffer.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(buffer.slice(6));
+                        if (data.type === 'done' && !isDone) {
+                            isDone = true;
+                            clearInterval(dotsAnimation);
+                            enterWaitingMode(loadingDots);
+
+                            finalData = {
+                                story: fullStory,
+                                attribute_changes: data.attribute_changes,
+                                suggestions: data.suggestions,
+                                new_character: data.new_character,
+                                fallback: data.fallback || false
+                            };
+
+                            streamingText.innerHTML = processDialogueText(fullStory);
+                            scrollToBottom();
+
+                            if (finalData.fallback) {
+                                showRetryButton('使用备用方案');
+                            }
+
+                            updateConversationHistory(action, finalData.story).then(() => {
+                                if (finalData.attribute_changes) {
+                                    applyAttributeChanges(finalData.attribute_changes);
+                                    displayAttributeChanges(finalData.attribute_changes);
+                                }
+
+                                if (finalData.new_character && finalData.new_character.name) {
+                                    incPendingOps();
+                                    handleNewCharacter(finalData.new_character).finally(() => {
+                                        decPendingOps();
+                                    });
+                                }
+
+                                incPendingOps();
+                                refreshSuggestions().finally(() => {
+                                    decPendingOps();
+                                    loadingDots.style.display = 'none';
+                                });
+                            });
+
+                            isProcessing = false;
+                        }
+                    } catch (e) {
+                        console.error('解析最终数据失败:', e);
                     }
+                }
 
-                    // 更新对话历史（包含摘要机制）
-                    await updateConversationHistory(action, finalData.story);
-
-                    // 应用属性变动（实际更新数据+显示，同步操作，无需pending）
-                    if (finalData.attribute_changes) {
-                        applyAttributeChanges(finalData.attribute_changes);
-                        displayAttributeChanges(finalData.attribute_changes);
-                    }
-
-                    // 处理新人物：异步，用pendingOps追踪
-                    if (finalData.new_character && finalData.new_character.name) {
-                        incPendingOps();
-                        handleNewCharacter(finalData.new_character).finally(() => {
-                            decPendingOps();
-                        });
-                    }
-
-                    // 刷新行动建议：异步，用pendingOps追踪
-                    incPendingOps();
-                    refreshSuggestions().finally(() => {
-                        decPendingOps();
-                        // 所有异步操作完成后，隐藏dots并退出处理模式
-                        loadingDots.style.display = 'none';
-                    });
-                } else {
-                    // 没有finalData也要退出
-                    showRetryButton('解析失败');
+                if (!isDone) {
+                    // 如果没有收到done事件，说明出错了
+                    clearInterval(dotsAnimation);
                     loadingDots.style.display = 'none';
+                    showRetryButton('连接中断');
                     exitProcessingMode();
                 }
+
             } catch (error) {
                 clearInterval(dotsAnimation);
                 loadingDots.style.display = 'none';
 
+                // 检查是否是用户打断
                 if (error.name === 'AbortError') {
-                    // 用户主动打断，执行回退（pendingOps在performRollback中清零）
                     performRollback(storyMessageDiv);
                 } else {
                     showRetryButton('请求失败');
                     addStoryMessage('请求失败: ' + error.message, 'error');
                     exitProcessingMode();
                 }
+                isProcessing = false;
+            } finally {
+                // 确保释放reader
+                if (reader) {
+                    reader.releaseLock();
+                }
+                currentEventSource = null;
             }
-
-            currentAbortController = null;
-            isProcessing = false;
         }
 
         // 执行回退（打断后）
         function performRollback(storyMessageDiv) {
+            // 中断SSE连接
+            abortAction();
+
             // 清零pendingOps，防止残留计数导致按钮永远禁用
             pendingOps = 0;
 
@@ -975,7 +1131,7 @@
             // 统一退出处理模式
             exitProcessingMode();
         }
-        
+
         // 显示重试按钮
         function showRetryButton(reason) {
             const storyDisplay = document.getElementById('storyDisplay');
@@ -988,7 +1144,7 @@
             storyDisplay.appendChild(retryDiv);
             scrollToBottom();
         }
-        
+
         // 隐藏重试按钮
         function hideRetryButton() {
             const existingRetry = document.querySelector('.retry-container');
@@ -996,7 +1152,7 @@
                 existingRetry.remove();
             }
         }
-        
+
         // 回退操作
         function retryLastAction() {
             if (previousGameData) {
@@ -1025,7 +1181,7 @@
                 hideRetryButton();
             }
         }
-        
+
         // 显示属性变动（在剧情下方）
         function displayAttributeChanges(changes) {
             let changeText = '';
@@ -1098,7 +1254,7 @@
             const storyDisplay = document.getElementById('storyDisplay');
             const messageDiv = document.createElement('div');
             messageDiv.className = `story-message story-${type}`;
-            
+
             if (type === 'user') {
                 messageDiv.innerHTML = `<strong>【玩家】</strong>${content}`;
             } else if (type === 'assistant') {
@@ -1106,7 +1262,7 @@
             } else {
                 messageDiv.innerHTML = `<span class="error">${content}</span>`;
             }
-            
+
             storyDisplay.appendChild(messageDiv);
             scrollToBottom();
         }
