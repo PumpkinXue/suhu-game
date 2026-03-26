@@ -98,7 +98,7 @@ def create_task():
         }
     return task_id
 
-def get_task_result(task_id):
+def _get_task_result_internal(task_id):
     """获取任务结果（内部使用）"""
     with tasks_lock:
         if task_id not in tasks:
@@ -370,7 +370,7 @@ def init_game():
 @app.route('/api/get_task_result/<task_id>', methods=['GET'])
 def get_task_result(task_id):
     """获取任务结果（轮询接口）"""
-    result = get_task_result(task_id)
+    result = _get_task_result_internal(task_id)
 
     if result is None:
         return jsonify({
