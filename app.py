@@ -332,8 +332,8 @@ def create_character(game_type):
 @app.route('/game/<game_type>')
 def game(game_type):
     """游戏主界面"""
-    if 'game_data' not in session:
-        return render_template('index.html')
+    # 游戏数据存储在 localStorage 中，前端会自行加载
+    # 不再依赖 server-side session 检查
     return render_template('game.html', game_type=game_type)
 
 @app.route('/api/init_game', methods=['POST'])
@@ -398,9 +398,10 @@ def get_task_result(task_id):
 
 @app.route('/api/get_game_data')
 def get_game_data():
-    """获取游戏数据"""
+    """获取游戏数据（优先从 localStorage，前端会自行加载）"""
+    # 注意：game.html 优先从 localStorage 读取，这里主要用于服务器端备份
     if 'game_data' not in session:
-        return jsonify({'success': False, 'error': '没有游戏数据'})
+        return jsonify({'success': False, 'error': '没有游戏数据，请从首页进入'})
     return jsonify({'success': True, 'data': session['game_data']})
 
 @app.route('/api/save_game_data', methods=['POST'])
