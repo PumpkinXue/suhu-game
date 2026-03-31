@@ -244,51 +244,84 @@
         async function loadGameData() {
             console.log('开始加载游戏数据...');
 
-            // 尝试从localStorage读取完整存档数据
-            if (loadFullSaveData()) {
-                console.log('从localStorage加载完整存档成功');
-                displayGameData();
-                // 恢复对话历史显示
-                restoreConversationHistory();
-                // 判断是否有已保存的有效行动建议，没有则重新生成
-                if (hasSavedSuggestions()) {
-                    restoreSuggestions();
-                } else {
-                    await loadInitialSuggestions();
-                }
-                document.getElementById('loading').style.display = 'none';
-                return;
-            }
+            // 设置加载超时
+            const LOAD_TIMEOUT = 120000; // 2分钟超时
+            let loadTimeoutId = null;
 
-            // 如果没有本地数据，尝试从服务器获取
-            try {
-                const response = await fetch('/api/get_game_data');
-                console.log('响应状态:', response.status);
-
-                if (!response.ok) {
-                    throw new Error('HTTP错误: ' + response.status);
-                }
-
-                const result = await response.json();
-                console.log('返回数据:', result);
-
-                if (result.success) {
-                    gameData = result.data;
-                    // 保存到localStorage
-                    localStorage.setItem('suhu_game_data', JSON.stringify(gameData));
+            const loadPromise = (async () => {
+                // 尝试从localStorage读取完整存档数据
+                if (loadFullSaveData()) {
+                    console.log('从localStorage加载完整存档成功');
                     displayGameData();
-                    await loadInitialSuggestions();
-                    document.getElementById('loading').style.display = 'none';
-                } else {
-                    console.error('加载失败:', result.error);
-                    alert('加载游戏数据失败，正在跳转...');
-                    window.location.href = '/';
+                    // 恢复对话历史显示
+                    restoreConversationHistory();
+                    // 判断是否有已保存的有效行动建议，没有则重新生成
+                    if (hasSavedSuggestions()) {
+                        restoreSuggestions();
+                        document.getElementById('loading').style.display = 'none';
+                        return true;
+                    } else {
+                        try {
+                            await loadInitialSuggestions();
+                            document.getElementById('loading').style.display = 'none';
+                            return true;
+                        } catch (error) {
+                            console.error('加载建议失败:', error);
+                            // 即使建议加载失败，也显示游戏界面
+                            document.getElementById('loading').style.display = 'none';
+                            return true;
+                        }
+                    }
                 }
-            } catch (error) {
-                console.error('请求失败:', error);
-                alert('加载失败: ' + error.message);
-                window.location.href = '/';
-            }
+
+                // 如果没有本地数据，尝试从服务器获取
+                try {
+                    const response = await fetch('/api/get_game_data');
+                    console.log('响应状态:', response.status);
+
+                    if (!response.ok) {
+                        throw new Error('HTTP错误: ' + response.status);
+                    }
+
+                    const result = await response.json();
+                    console.log('返回数据:', result);
+
+                    if (result.success) {
+                        gameData = result.data;
+                        // 保存到localStorage
+                        localStorage.setItem('suhu_game_data', JSON.stringify(gameData));
+                        displayGameData();
+                        try {
+                            await loadInitialSuggestions();
+                        } catch (error) {
+                            console.error('加载建议失败:', error);
+                        }
+                        document.getElementById('loading').style.display = 'none';
+                        return true;
+                    } else {
+                        console.error('加载失败:', result.error);
+                        alert('加载游戏数据失败，正在跳转...');
+                        window.location.href = '/';
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('请求失败:', error);
+                    alert('加载失败: ' + error.message);
+                    window.location.href = '/';
+                    return false;
+                }
+            })();
+
+            // 设置超时
+            loadPromise.then(() => {
+                if (loadTimeoutId) clearTimeout(loadTimeoutId);
+            });
+
+            loadTimeoutId = setTimeout(() => {
+                console.error('加载超时');
+                document.getElementById('loading').style.display = 'none';
+                alert('加载超时，请检查网络后重试');
+            }, LOAD_TIMEOUT);
         }
 
         // 判断存档中是否有有效的行动建议（至少有一条不是 '-'）
@@ -544,34 +577,95 @@
             onError('等待超时');
         }
 
-        // 加载初始行动建议（使用任务队列）
-        async function loadInitialSuggestions() {
-            try {
-                const response = await fetch('/api/get_suggestions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        game_data: gameData,
-                        history: getHistoryForAPI()
-                    })
-                });
-                const result = await response.json();
-                if (result.success && result.task_id) {
-                    // 轮询获取结果
-                    pollTaskResult(result.task_id,
-                        (data) => {
-                            if (data.suggestions) {
-                                updateSuggestions(data.suggestions);
-                            }
-                        },
-                        (error) => {
-                            console.error('加载建议失败:', error);
+        // 加载初始行动建议（使用任务队列，返回Promise）
+        function loadInitialSuggestions() {
+            return new Promise((resolve, reject) => {
+                // 显示加载状态
+                updateSuggestionsLoading(true);
+
+                try {
+                    fetch('/api/get_suggestions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            game_data: gameData,
+                            history: getHistoryForAPI()
+                        })
+                    }).then(response => response.json()).then(result => {
+                        if (result.success && result.task_id) {
+                            // 轮询获取结果，传入 resolve 和 reject
+                            pollTaskResultWithPromise(result.task_id, resolve, reject);
+                        } else {
+                            updateSuggestionsLoading(false);
+                            reject(new Error(result.error || '获取建议失败'));
                         }
-                    );
+                    }).catch(error => {
+                        updateSuggestionsLoading(false);
+                        reject(error);
+                    });
+                } catch (error) {
+                    updateSuggestionsLoading(false);
+                    reject(error);
                 }
-            } catch (error) {
-                console.error('加载建议失败:', error);
+            });
+        }
+
+        // 更新建议区域的加载状态
+        function updateSuggestionsLoading(isLoading) {
+            const suggestion1 = document.getElementById('suggestion1');
+            const suggestion2 = document.getElementById('suggestion2');
+            const suggestion3 = document.getElementById('suggestion3');
+            const suggestion4 = document.getElementById('suggestion4');
+            if (isLoading) {
+                suggestion1.textContent = '加载中...';
+                suggestion2.textContent = '加载中...';
+                suggestion3.textContent = '加载中...';
+                suggestion4.textContent = '加载中...';
+                suggestion1.className = 'suggestion-text loading';
+                suggestion2.className = 'suggestion-text loading';
+                suggestion3.className = 'suggestion-text loading';
+                suggestion4.className = 'suggestion-text loading';
+            } else {
+                suggestion1.className = 'suggestion-text';
+                suggestion2.className = 'suggestion-text';
+                suggestion3.className = 'suggestion-text';
+                suggestion4.className = 'suggestion-text';
             }
+        }
+
+        // 带Promise的轮询函数
+        function pollTaskResultWithPromise(taskId, resolve, reject) {
+            const POLL_INTERVAL = 1000;
+            const MAX_WAIT_TIME = 600000; // 10分钟
+
+            function poll() {
+                fetch(`/api/get_task_result/${taskId}`)
+                    .then(response => {
+                        if (!response.ok) throw new Error('获取结果失败');
+                        return response.json();
+                    })
+                    .then(result => {
+                        if (result.status === 'done') {
+                            updateSuggestionsLoading(false);
+                            if (result.result && result.result.suggestions) {
+                                updateSuggestions(result.result.suggestions);
+                            }
+                            resolve(result.result);
+                        } else if (result.status === 'error') {
+                            updateSuggestionsLoading(false);
+                            reject(new Error(result.error || '任务执行出错'));
+                        } else {
+                            // 继续轮询
+                            setTimeout(poll, POLL_INTERVAL);
+                        }
+                    })
+                    .catch(error => {
+                        updateSuggestionsLoading(false);
+                        reject(error);
+                    });
+            }
+
+            poll();
         }
 
         // 更新行动建议
@@ -590,34 +684,46 @@
             };
         }
 
-        // 刷新行动建议（基于最新剧情历史）
-        async function refreshSuggestions() {
-            try {
-                const response = await fetch('/api/get_suggestions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        game_data: gameData,
-                        history: getHistoryForAPI()
-                    })
-                });
-                const result = await response.json();
-                if (result.success && result.task_id) {
-                    // 轮询获取结果
-                    pollTaskResult(result.task_id,
-                        (data) => {
-                            if (data.suggestions) {
-                                updateSuggestions(data.suggestions);
-                            }
-                        },
-                        (error) => {
-                            console.error('刷新建议失败:', error);
+        // 刷新行动建议（基于最新剧情历史，返回Promise）
+        function refreshSuggestions() {
+            return new Promise((resolve, reject) => {
+                // 显示加载状态
+                updateSuggestionsLoading(true);
+
+                try {
+                    fetch('/api/get_suggestions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            game_data: gameData,
+                            history: getHistoryForAPI()
+                        })
+                    }).then(response => response.json()).then(result => {
+                        if (result.success && result.task_id) {
+                            // 轮询获取结果
+                            pollTaskResultWithPromise(result.task_id,
+                                (data) => {
+                                    updateSuggestionsLoading(false);
+                                    resolve(data);
+                                },
+                                (error) => {
+                                    updateSuggestionsLoading(false);
+                                    reject(error);
+                                }
+                            );
+                        } else {
+                            updateSuggestionsLoading(false);
+                            reject(new Error(result.error || '获取建议失败'));
                         }
-                    );
+                    }).catch(error => {
+                        updateSuggestionsLoading(false);
+                        reject(error);
+                    });
+                } catch (error) {
+                    updateSuggestionsLoading(false);
+                    reject(error);
                 }
-            } catch (error) {
-                console.error('刷新建议失败:', error);
-            }
+            });
         }
 
         // 执行行动
